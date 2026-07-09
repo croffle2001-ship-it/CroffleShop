@@ -601,6 +601,19 @@ export default function CustomerView({
                         <p><strong>ที่อยู่:</strong> {order.roomNo}</p>
                         {order.note && <p className="text-[11px] text-[#ba1a1a]"><strong>โน้ตพิเศษ:</strong> {order.note}</p>}
                       </div>
+                        {/* ✅ แทรกส่วนนี้ลงไปตรงนี้ครับ! */}
+                      {order.status === 'Delivered' && order.deliveryPhoto && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl animate-in fade-in zoom-in duration-300">
+                          <p className="text-[10px] font-bold text-emerald-700 mb-2 flex items-center gap-1">
+                            <Camera size={12} /> หลักฐานการจัดส่ง:
+                          </p>
+                          <img 
+                            src={order.deliveryPhoto} 
+                            alt="หลักฐานจัดส่ง" 
+                            className="w-full h-auto rounded-xl border shadow-sm"
+                          />
+                        </div>
+                      )}
 
                       <div className="flex justify-between items-center pt-2 border-t border-[#fff1eb]">
                         <span className="text-xs text-[#897266] font-medium">รวมราคาทั้งหมด</span>
