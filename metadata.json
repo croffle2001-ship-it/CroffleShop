@@ -1,0 +1,6 @@
+{
+  "name": "ครอฟเฟิลไอ้แว่น กม.44",
+  "description": "แอปพลิเคชันสั่งอาหารและระบบจัดการแอดมินแบบครบวงจรสำหรับร้านครอฟเฟิลไอ้แว่น กม.44 สะดวกสบายบนมือถือ",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
