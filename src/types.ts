@@ -60,3 +60,10 @@ export interface ShopConfig {
   closeTime: string;
 }
 
+export interface ShopConfig {
+  isOpen: boolean;
+  autoSchedule: boolean;
+  openTime: string;
+  closeTime: string;
+  qrCodeUrl?: string; // เพิ่มบรรทัดนี้เข้ามา
+}
