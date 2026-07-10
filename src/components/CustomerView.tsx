@@ -47,9 +47,13 @@ export default function CustomerView({
   const [roomNo, setRoomNo] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [orderNote, setOrderNote] = useState('');
+  const [deliveryArea, setDeliveryArea] = useState<string>('');
+  
+  // --- ตัวแปรใหม่สำหรับ Payment ---
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'qr'>('cash');
+  
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
-  const [deliveryArea, setDeliveryArea] = useState<string>('');
 
   // List of all categories available
   const categories: (Category | 'all' | 'เมนูขายดี')[] = ['all', 'เมนูขายดี', 'ขนม', 'เครื่องดื่ม'];
@@ -109,10 +113,8 @@ export default function CustomerView({
         return prev.filter(t => t.name !== topping.name);
       } else {
         if (topping.name === 'หน้าเดิม') {
-          // If selecting 'หน้าเดิม', clear other toppings
           return [topping];
         } else {
-          // If selecting other toppings, remove 'หน้าเดิม' if it was selected
           const filtered = prev.filter(t => t.name !== 'หน้าเดิม');
           return [...filtered, topping];
         }
@@ -153,7 +155,6 @@ export default function CustomerView({
       return [...prevCart, newCartItem];
     });
 
-    // Close drawer
     setSelectedProduct(null);
   };
 
@@ -192,16 +193,18 @@ export default function CustomerView({
       ? `${deliveryArea} - บริษัท ${companyName.trim()} - ${roomNo}`
       : `${deliveryArea} - ${roomNo}`;
 
-    // Simulate short network delay
+    // แทรกช่องทางชำระเงินเข้าไปในโน้ต เพื่อให้แอดมินเห็นง่ายๆ
+    const paymentLabel = paymentMethod === 'qr' ? '📱 โอนเงิน(รอตรวจสลิป)' : '💵 เงินสดปลายทาง';
+    const finalNote = `[ชำระด้วย: ${paymentLabel}] ${orderNote}`.trim();
+
     setTimeout(() => {
-      onPlaceOrder(customerName, phone, fullAddress, orderNote);
+      onPlaceOrder(customerName, phone, fullAddress, finalNote);
       setIsSubmittingOrder(false);
-      setCart([]); // clear cart
+      setCart([]); 
       const newOrderId = `#${Math.floor(4400 + Math.random() * 500)}`;
       setOrderSuccess(newOrderId);
       setActiveTab('orders');
 
-      // Clear form inputs
       setOrderNote('');
       setCompanyName('');
     }, 1200);
@@ -210,22 +213,15 @@ export default function CustomerView({
   return (
     <div className="w-full h-[100dvh] md:max-w-[430px] mx-auto md:h-[880px] bg-[#fff8f6] text-[#231914] relative overflow-hidden flex flex-col md:rounded-[48px] md:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] md:border-[10px] md:border-neutral-900 md:ring-1 md:ring-black/10 transition-all duration-300">
       
-      {/* iPhone 16+ Dynamic Island Mockup on Desktop */}
-      <div className="hidden md:flex absolute top-3.5 left-1/2 -translate-x-1/2 w-28 h-6 bg-black rounded-full z-50 items-center justify-between px-3 shadow-inner">
-        <div className="w-2.5 h-2.5 rounded-full bg-[#111] border border-neutral-800/40"></div>
-        <div className="w-3.5 h-1 bg-[#1a1a1a] rounded-full"></div>
-        <div className="w-2 h-2 rounded-full bg-[#050505] border border-neutral-800/20"></div>
-      </div>
-
-      {/* Dynamic Header */}
+      {/* Header */}
       <header className="shrink-0 z-40 bg-[#fff8f6]/95 backdrop-blur-md shadow-sm border-b border-[#f2dfd5] md:pt-9 pt-3">
         <div className="flex justify-between items-center px-4 py-3 w-full">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full border-2 border-[#9b4500] overflow-hidden flex-shrink-0 bg-[#feeae0] shadow-sm">
               <img 
                 className="w-full h-full object-cover" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBv_e9mcuFwa6h1Bn6IU67sO4MfR3PFrBhRPWJOiFBqAFYKxcP3SOwQSyBapH5fNLPnioGx5M550jo-Fz0AhIVcCnQtAczocsjjc8y5Sa4wh6LsDhQs13PZSBeYXVSNSYRm5RUL5wwkA9496hJJD9tOu8U7yGp7PwxVuBf0KdBeyiozngYb7xVMGe_9M03CJ8sRImzuIigdDA3aOJxP6vaIA6XI5PJepq9me0fAk57flk0fap9LCSFn94J8Nxo8dVr6nQPoQh15u_9W" 
-                alt="ครอฟเฟิลไอ้แว่น Logo"
+                src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150" 
+                alt="Logo"
               />
             </div>
             <div className="flex flex-col">
@@ -246,7 +242,6 @@ export default function CustomerView({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Quick Switch to Admin panel */}
             <button 
               onClick={onSwitchToAdmin}
               className="flex items-center gap-1 text-xs font-semibold bg-[#ffdbc9] hover:bg-[#ffb68d] text-[#331200] px-3 py-2 rounded-full border border-[#ff8c42]/20 transition-all duration-150 active:scale-95"
@@ -258,8 +253,9 @@ export default function CustomerView({
         </div>
       </header>
 
-      {/* Main Content Containers */}
+      {/* Main Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-28 scrollbar-none relative">
+        {/* TAB 1: HOME */}
         {activeTab === 'home' && (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -313,7 +309,7 @@ export default function CustomerView({
               )}
             </div>
 
-            {/* Featured Slider - Only show when not searching specifically or filtering heavily */}
+            {/* Featured Slider */}
             {searchQuery === '' && selectedCategory === 'all' && (
               <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center px-1">
@@ -444,7 +440,6 @@ export default function CustomerView({
                           !p.inStock ? 'pointer-events-none opacity-80' : 'active:scale-98'
                         }`}
                       >
-                        {/* Image area */}
                         <div className="relative aspect-square bg-[#feeae0]/30 overflow-hidden">
                           <img 
                             className={`w-full h-full object-cover group-hover:scale-103 transition-transform duration-300 ${!p.inStock ? 'grayscale-[40%]' : ''}`}
@@ -453,7 +448,6 @@ export default function CustomerView({
                             referrerPolicy="no-referrer"
                           />
 
-                          {/* Floating badges */}
                           <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
                             {hasRank && (
                               <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold shadow flex items-center gap-0.5">
@@ -468,7 +462,6 @@ export default function CustomerView({
                             )}
                           </div>
 
-                          {/* Out of stock overlay */}
                           {!p.inStock && (
                             <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-3">
                               <span className="bg-black/70 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl border border-white/20 shadow-lg tracking-wider">
@@ -478,7 +471,6 @@ export default function CustomerView({
                           )}
                         </div>
 
-                        {/* Text details area */}
                         <div className="p-3.5 text-center flex flex-col flex-grow bg-white/45">
                           <h4 className={`font-bold text-sm text-[#231914] line-clamp-1 ${!p.inStock ? 'text-stone-400' : ''}`}>
                             {p.name}
@@ -499,7 +491,7 @@ export default function CustomerView({
           </motion.div>
         )}
 
-        {/* ACTIVE ORDERS HISTORY TAB */}
+        {/* TAB 2: ACTIVE ORDERS */}
         {activeTab === 'orders' && (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -578,7 +570,6 @@ export default function CustomerView({
                         </span>
                       </div>
 
-                      {/* Items Ordered List */}
                       <div className="space-y-1.5 py-1">
                         {order.items.map((item, idx) => (
                           <div key={idx} className="flex justify-between items-start text-xs text-[#231914]">
@@ -594,13 +585,12 @@ export default function CustomerView({
                         ))}
                       </div>
 
-                      {/* Address detail */}
                       <div className="text-xs bg-[#fff1eb]/60 p-2.5 rounded-xl border border-[#ddc1b3]/20 flex flex-col gap-1 text-[#564338]">
                         <p><strong>ผู้รับ:</strong> {order.customerName} ({order.phone})</p>
                         <p><strong>ที่อยู่:</strong> {order.roomNo}</p>
-                        {order.note && <p className="text-[11px] text-[#ba1a1a]"><strong>โน้ตพิเศษ:</strong> {order.note}</p>}
+                        {order.note && <p className="text-[11px] text-[#ba1a1a]"><strong>คำขอเพิ่มเติม:</strong> {order.note}</p>}
                       </div>
-                        {/* ✅ หลักฐานการจัดส่งที่นำเข้ามา (แก้ไข Import แล้ว) */}
+                      
                       {order.status === 'Delivered' && order.deliveryPhoto && (
                         <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl animate-in fade-in zoom-in duration-300">
                           <p className="text-[10px] font-bold text-emerald-700 mb-2 flex items-center gap-1">
@@ -626,7 +616,7 @@ export default function CustomerView({
           </motion.div>
         )}
 
-        {/* CUSTOMER SHOPPING CART TAB */}
+        {/* TAB 3: CUSTOMER SHOPPING CART */}
         {activeTab === 'cart' && (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -643,7 +633,6 @@ export default function CustomerView({
               <p className="text-xs text-[#564338]/80 mt-0.5">ตรวจสอบรายการและเพิ่มที่อยู่จัดส่งเพื่อความฟินถึงหน้าห้อง</p>
             </div>
 
-            {/* Delivery Scope Info */}
             <div className="bg-[#ff8c42]/10 border border-[#ff8c42]/20 text-[#9b4500] px-4 py-2.5 rounded-2xl text-xs font-semibold flex items-center gap-2">
               <span>📍</span>
               <span>ส่งเฉพาะ <strong>บ้านเอื้ออาทร กม.44</strong> และ <strong>โครงการ MMC</strong> เท่านั้นค่ะ</span>
@@ -794,7 +783,7 @@ export default function CustomerView({
                         required={deliveryArea === 'โครงการ MMC'}
                         value={companyName}
                         onChange={(e) => setCompanyName(e.target.value)}
-                        placeholder="ระบุชื่อบริษัท เช่น บริษัท บอช / ไดกิ้น / แคนนอน"
+                        placeholder="ระบุชื่อบริษัท เช่น บริษัท บอช / ไดกิ้น"
                         className="px-3.5 py-2.5 rounded-xl border border-[#ddc1b3]/50 focus:outline-none focus:ring-2 focus:ring-[#9b4500]/20 text-xs placeholder:text-[#897266]/50 bg-white text-[#231914]"
                       />
                     </motion.div>
@@ -831,7 +820,7 @@ export default function CustomerView({
                       rows={2}
                       value={roomNo}
                       onChange={(e) => setRoomNo(e.target.value)}
-                      placeholder="เช่น อาคาร A ชั้น 5 ห้อง 502 (กรณีตึกอนุญาตให้ขึ้นส่ง) หรือให้แขวนไว้ใต้ตึก"
+                      placeholder="เช่น อาคาร A ชั้น 5 ห้อง 502 หรือให้แขวนไว้ใต้ตึก"
                       className="px-3.5 py-2 rounded-xl border border-[#ddc1b3]/50 focus:outline-none focus:ring-2 focus:ring-[#9b4500]/20 text-xs placeholder:text-[#897266]/50 bg-[#fff8f6] text-[#231914]"
                     />
                   </div>
@@ -842,10 +831,64 @@ export default function CustomerView({
                       type="text" 
                       value={orderNote}
                       onChange={(e) => setOrderNote(e.target.value)}
-                      placeholder="เช่น ฝากวางที่ลิฟต์คอนโด / ขอน้ำตาลทรายแยกค่ะ"
+                      placeholder="เช่น ฝากวางที่ป้อมยามคอนโด / ขอน้ำตาลทรายแยกค่ะ"
                       className="px-3.5 py-2.5 rounded-xl border border-[#ddc1b3]/50 focus:outline-none focus:ring-2 focus:ring-[#9b4500]/20 text-xs placeholder:text-[#897266]/50 bg-[#fff8f6] text-[#231914]"
                     />
                   </div>
+
+                  {/* --- ส่วนที่เพิ่มใหม่: เลือกการชำระเงิน --- */}
+                  <div className="flex flex-col gap-2 pt-2 border-t border-[#fff1eb]">
+                    <label className="text-xs font-bold text-[#564338]">ช่องทางการชำระเงิน <span className="text-red-500">*</span></label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('cash')}
+                        className={`px-3 py-2.5 rounded-xl text-center text-xs font-bold border flex items-center justify-center gap-2 transition-all ${
+                          paymentMethod === 'cash'
+                            ? 'bg-[#feeae0] border-[#9b4500] text-[#9b4500] ring-1 ring-[#9b4500]'
+                            : 'bg-white border-[#ddc1b3]/30 text-[#564338] hover:bg-[#fff1eb]/40'
+                        }`}
+                      >
+                        <span>💵</span> เงินสดปลายทาง
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('qr')}
+                        className={`px-3 py-2.5 rounded-xl text-center text-xs font-bold border flex items-center justify-center gap-2 transition-all ${
+                          paymentMethod === 'qr'
+                            ? 'bg-[#feeae0] border-[#9b4500] text-[#9b4500] ring-1 ring-[#9b4500]'
+                            : 'bg-white border-[#ddc1b3]/30 text-[#564338] hover:bg-[#fff1eb]/40'
+                        }`}
+                      >
+                        <span>📱</span> โอนเงิน / สแกน QR
+                      </button>
+                    </div>
+
+                    <AnimatePresence>
+                      {paymentMethod === 'qr' && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-2 bg-[#fffaf8] border border-[#ddc1b3]/50 rounded-xl p-4 flex flex-col items-center text-center gap-2 overflow-hidden"
+                        >
+                          <p className="text-[11px] font-bold text-[#9b4500]">ยอดที่ต้องโอนชำระ: ฿{cartTotalPrice}</p>
+                          {shopConfig.qrCodeUrl ? (
+                            <img src={shopConfig.qrCodeUrl} alt="QR Code ชำระเงิน" className="w-40 h-40 object-contain rounded-lg border border-[#ddc1b3]/30 shadow-sm" />
+                          ) : (
+                            <div className="w-40 h-40 bg-stone-100 rounded-lg flex flex-col items-center justify-center text-stone-400 gap-2 border border-dashed border-stone-300">
+                              <Camera size={24} />
+                              <span className="text-[10px]">รอแอดมินอัปเดต QR</span>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-stone-500 mt-1 leading-relaxed">
+                            สแกนชำระเงินและ<strong className="text-[#9b4500]">เตรียมสลิป</strong>โชว์ให้ไรเดอร์ตอนรับอาหารนะคะ
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  {/* --- จบส่วนที่เพิ่มใหม่ --- */}
 
                   <button 
                     type="submit"
@@ -894,7 +937,6 @@ export default function CustomerView({
               transition={{ type: "spring", damping: 25, stiffness: 220 }}
               className="absolute bottom-0 left-0 right-0 w-full bg-[#fff8f6] rounded-t-[2.5rem] shadow-2xl z-50 p-6 max-h-[85%] overflow-y-auto border-t border-[#f2dfd5]"
             >
-              {/* Top Drag bar handle */}
               <div className="w-12 h-1.5 bg-[#f2dfd5] rounded-full mx-auto mb-4" />
 
               <div className="flex justify-between items-start mb-4">
@@ -910,12 +952,10 @@ export default function CustomerView({
                 </button>
               </div>
 
-              {/* Product description */}
               <p className="text-xs text-[#564338] mb-5 leading-relaxed bg-[#fff1eb]/50 p-3 rounded-2xl border border-[#ddc1b3]/10">
                 {selectedProduct.description || 'ครอฟเฟิลอบใหม่ สดกรอบนอกนุ่มในสไตล์วันมอารมณ์ดี'}
               </p>
 
-              {/* Toppings Multi-Selector */}
               {Array.isArray(selectedProduct.toppings) && selectedProduct.toppings.length > 0 && selectedProduct.name !== 'ทูโทรน' && selectedProduct.name !== 'ทูโทน' && (
                 <div className="mb-5 flex flex-col gap-2">
                   <h4 className="text-xs font-bold text-[#231914] px-1">เปลี่ยนท็อปปิ้งบนหน้าครอฟเฟิล (ชิ้นแรกฟรี ชิ้นถัดไป +฿5):</h4>
@@ -955,7 +995,6 @@ export default function CustomerView({
                 </div>
               )}
 
-              {/* Custom Note item text */}
               <div className="mb-6 flex flex-col gap-1.5">
                 <h4 className="text-xs font-bold text-[#231914] px-1">คำขอเพิ่มเติม (ถ้ามี):</h4>
                 <input 
@@ -967,7 +1006,6 @@ export default function CustomerView({
                 />
               </div>
 
-              {/* Quantity Selector and Confirm button */}
               <div className="flex items-center gap-4 border-t border-[#f2dfd5] pt-4">
                 <div className="flex items-center gap-2.5 border border-[#ddc1b3]/30 px-3 py-2 bg-white rounded-2xl shadow-inner">
                   <button 
