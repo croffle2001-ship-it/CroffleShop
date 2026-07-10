@@ -89,7 +89,10 @@ export default function AdminView({
 
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `delivery-${orderId}-${Date.now()}.${fileExt}`;
+      // แก้ไข: ลบเครื่องหมาย # และอักขระพิเศษออกจาก orderId ป้องกัน URL ขาดหาย
+      const safeOrderId = orderId.replace(/[^a-zA-Z0-9]/g, ''); 
+      const timestamp = Date.now();
+      const fileName = `delivery-${safeOrderId}-${timestamp}.${fileExt}`;
       const filePath = `deliveries/${fileName}`;
 
       // อัปโหลดไฟล์เข้า Bucket
@@ -104,7 +107,8 @@ export default function AdminView({
         .from('croffle-bucket')
         .getPublicUrl(filePath);
 
-      const publicUrl = data.publicUrl;
+      // แก้ไข: เติม ?t=... ท้าย URL เพื่อบังคับให้เบราว์เซอร์โหลดรูปใหม่เสมอ (ไม่จำ Cache)
+      const publicUrl = `${data.publicUrl}?t=${timestamp}`;
 
       // บันทึกลิงก์ลง Database พร้อมเปลี่ยนสถานะเป็น Delivered
       const { error: updateError } = await supabase
