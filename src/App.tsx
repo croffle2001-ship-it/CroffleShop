@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Product, Order, InventoryItem, CartItem, OrderStatus, ShopConfig, Category } from './types';
-import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_INVENTORY } from './data';
+import { INITIAL_PRODUCTS, INITIAL_ORDERS } from './data';
 import CustomerView from './components/CustomerView';
 import AdminView from './components/AdminView';
 import AdminLogin from './components/AdminLogin';
@@ -17,7 +17,6 @@ export default function App() {
     const saved = localStorage.getItem('croffle_cart_v8');
     return saved ? JSON.parse(saved) : [];
   });
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [shopConfig, setShopConfig] = useState<ShopConfig>({
     isOpen: true,
     autoSchedule: false,
@@ -25,9 +24,9 @@ export default function App() {
     closeTime: "20:00"
   });
 
-  // Visitor Tracking States
-  const [totalViews, setTotalViews] = useState<number>(348);
-  const [currentOnline, setCurrentOnline] = useState<number>(5);
+  // ✅ ระบบดักจับการเข้าชมจริง (Live Traffic via Supabase Presence & Tables)
+  const [totalViews, setTotalViews] = useState<number>(0);
+  const [currentOnline, setCurrentOnline] = useState<number>(1);
 
   // Admin Credentials and login states
   const [adminUsername, setAdminUsername] = useState<string>('narongrit');
@@ -38,7 +37,6 @@ export default function App() {
   useEffect(() => {
     if (view === 'customer') {
       setIsAdminLoggedIn(false);
-      setTotalViews(prev => prev + 1);
     }
   }, [view]);
 
@@ -47,7 +45,7 @@ export default function App() {
     localStorage.setItem('croffle_cart_v8', JSON.stringify(cart));
   }, [cart]);
 
-  // 🚀 1. ดึงข้อมูลทั้งหมดจาก Supabase เมื่อเปิดเว็บ (พร้อมระบบเติมข้อมูลเริ่มต้นอัตโนมัติ)
+  // 🚀 1. ดึงข้อมูลทั้งหมดจาก Supabase เมื่อเปิดเว็บ (พร้อมระบบเพิ่มผู้ชมสะสมจริง)
   useEffect(() => {
     const fetchDatabase = async () => {
       // 1.1 ดึงเมนูอาหาร
@@ -55,27 +53,17 @@ export default function App() {
       if (prodData && prodData.length > 0) {
         setProducts(prodData);
       } else if (!prodErr) {
-        // ถ้าตารางว่างเปล่า ให้เติมข้อมูลเริ่มต้นจาก INITIAL_PRODUCTS ลง Database ทันที
         await supabase.from('products').insert(INITIAL_PRODUCTS);
         setProducts(INITIAL_PRODUCTS);
       }
 
-      // 1.2 ดึงสต็อกวัตถุดิบ
-      const { data: invData, error: invErr } = await supabase.from('inventory').select('*');
-      if (invData && invData.length > 0) {
-        setInventory(invData);
-      } else if (!invErr) {
-        await supabase.from('inventory').insert(INITIAL_INVENTORY);
-        setInventory(INITIAL_INVENTORY);
-      }
-
-      // 1.3 ดึงรายการออเดอร์ทั้งหมด
+      // 1.2 ดึงรายการออเดอร์ทั้งหมด
       const { data: orderData } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
       if (orderData) {
         setOrders(orderData);
       }
 
-      // 1.4 ดึงสถานะเปิด-ปิดร้าน
+      // 1.3 ดึงสถานะเปิด-ปิดร้าน
       const { data: configData } = await supabase.from('shop_config').select('*').eq('id', 1).single();
       if (configData) {
         setShopConfig({
@@ -85,15 +73,30 @@ export default function App() {
           closeTime: configData.closeTime || "20:00"
         });
       }
+
+      // 1.4 อัปเดตและดึงยอดผู้เข้าชมสะสมของจริงจากตาราง page_views
+      try {
+        const { data: viewsData } = await supabase.from('page_views').select('count').eq('id', 1).single();
+        if (viewsData) {
+          const updatedCount = viewsData.count + 1;
+          setTotalViews(updatedCount);
+          await supabase.from('page_views').update({ count: updatedCount }).eq('id', 1);
+        } else {
+          // หากรันครั้งแรกและตารางยังว่างอยู่ให้เพิ่มแถวแรกเข้าฐานข้อมูล
+          await supabase.from('page_views').insert([{ id: 1, count: 1 }]);
+          setTotalViews(1);
+        }
+      } catch (err) {
+        console.error("Error tracking views:", err);
+      }
     };
 
     fetchDatabase();
 
-    // 📡 2. เปิดระบบ Real-time คอยดักจับเมื่อมีออเดอร์ใหม่เข้ามาจากลูกค้า
+    // 📡 2. เปิดระบบ Real-time ดักจับออเดอร์ใหม่จากลูกค้า
     const orderSubscription = supabase
       .channel('public:orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
-        // เมื่อมีข้อมูลเปลี่ยนแปลง ให้ดึงออเดอร์อัปเดตล่าสุดมาแสดงผลบนจอทันที
         const { data } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
         if (data) {
           setOrders(data);
@@ -104,8 +107,26 @@ export default function App() {
       })
       .subscribe();
 
+    // 👥 3. ระบบติดตามจำนวนคนดูออนไลน์แบบเรียลไทม์ (Supabase Presence)
+    const userStatusChannel = supabase.channel('online-users', {
+      config: { presence: { key: 'user' } }
+    });
+
+    userStatusChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = userStatusChannel.presenceState();
+        const onlineCount = Object.keys(state).length;
+        setCurrentOnline(onlineCount > 0 ? onlineCount : 1);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await userStatusChannel.track({ online_at: new Date().toISOString() });
+        }
+      });
+
     return () => {
       supabase.removeChannel(orderSubscription);
+      supabase.removeChannel(userStatusChannel);
     };
   }, []);
 
@@ -170,7 +191,6 @@ export default function App() {
       note: note.trim() || undefined
     };
 
-    // ส่งข้อมูลไปบันทึกลงฐานข้อมูล
     const { error } = await supabase.from('orders').insert([newOrder]);
 
     if (error) {
@@ -178,7 +198,6 @@ export default function App() {
       console.error(error);
     } else {
       setCart([]);
-      // สต็อกนมกับแป้งจะถูกอัปเดตผ่านฟังก์ชันฝั่งแอดมิน
     }
   };
 
@@ -187,27 +206,10 @@ export default function App() {
     alert("เปลี่ยนรหัสผ่านสำเร็จแล้วครับ!");
   };
 
-  const handleResetDefaults = async () => {
-    if (confirm("คุณต้องการล้างข้อมูลออเดอร์และรีเซ็ตเมนูกลับเป็นค่าเริ่มต้นใช่หรือไม่?")) {
-      await supabase.from('orders').delete().neq('id', '0');
-      await supabase.from('products').delete().neq('id', '0');
-      await supabase.from('inventory').delete().neq('id', '0');
-      
-      await supabase.from('products').insert(INITIAL_PRODUCTS);
-      await supabase.from('inventory').insert(INITIAL_INVENTORY);
-      
-      setProducts(INITIAL_PRODUCTS);
-      setInventory(INITIAL_INVENTORY);
-      setOrders([]);
-      alert("รีเซ็ตระบบกลับสู่ค่าเริ่มต้นเรียบร้อยแล้วครับ!");
-    }
-  };
-
   // Wrapper สำหรับอัปเดต Products ลง Database
   const handleSetProducts: React.Dispatch<React.SetStateAction<Product[]>> = (val) => {
     setProducts(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
-      // อัปเดตข้อมูลขึ้น Database
       next.forEach(async (p) => {
         await supabase.from('products').upsert(p);
       });
@@ -221,17 +223,6 @@ export default function App() {
       const next = typeof val === 'function' ? val(prev) : val;
       next.forEach(async (o) => {
         await supabase.from('orders').upsert(o);
-      });
-      return next;
-    });
-  };
-
-  // Wrapper สำหรับอัปเดต Inventory ลง Database
-  const handleSetInventory: React.Dispatch<React.SetStateAction<InventoryItem[]>> = (val) => {
-    setInventory(prev => {
-      const next = typeof val === 'function' ? val(prev) : val;
-      next.forEach(async (inv) => {
-        await supabase.from('inventory').upsert(inv);
       });
       return next;
     });
@@ -277,10 +268,10 @@ export default function App() {
           setProducts={handleSetProducts}
           orders={orders}
           setOrders={handleSetOrders}
-          inventory={inventory}
-          setInventory={handleSetInventory}
+          inventory={[]} 
+          setInventory={() => {}} 
           onSwitchToCustomer={() => setView('customer')}
-          onResetDefaults={handleResetDefaults}
+          onResetDefaults={() => {}} 
           shopConfig={shopConfig}
           setShopConfig={handleSetShopConfig}
           totalViews={totalViews}

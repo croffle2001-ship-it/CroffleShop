@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   TrendingUp, ShoppingCart, Star, Package, RefreshCw, 
   Trash2, Plus, Check, X, Shield, Eye, Edit2, ToggleLeft, ToggleRight, Settings, Coffee, Utensils,
@@ -45,7 +45,7 @@ export default function AdminView({
   adminPassword,
   onUpdateAdminPassword
 }: AdminViewProps) {
-  // Navigation for Admin tab: 'dashboard' | 'orders' | 'menu_stock' | 'settings'
+  // Navigation for Admin tab
   const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'orders' | 'menu_stock' | 'settings'>('dashboard');
 
   // Form states for adding a new product
@@ -61,10 +61,6 @@ export default function AdminView({
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingPriceValue, setEditingPriceValue] = useState<string>('');
 
-  // Edit inventory states
-  const [editingInventoryId, setEditingInventoryId] = useState<string | null>(null);
-  const [editingInventoryText, setEditingInventoryText] = useState<string>('');
-
   // Password change states
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
@@ -73,7 +69,42 @@ export default function AdminView({
   // Full image preview state
   const [selectedFullPhoto, setSelectedFullPhoto] = useState<string | null>(null);
 
-  // ✅ 1. ระบบอัปโหลดรูปภาพหลักฐานจัดส่ง (Proof of Delivery) ขึ้น Supabase Storage
+  // Admin Profile states
+  const [isUploadingProfile, setIsUploadingProfile] = useState(false);
+  const [adminProfilePic, setAdminProfilePic] = useState(() => {
+    return localStorage.getItem('adminProfilePic') || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150";
+  });
+
+  // อัปโหลดรูปโปรไฟล์แอดมิน
+  const handleUploadAdminProfile = async (file: File) => {
+    try {
+      setIsUploadingProfile(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `admin-profile-${Date.now()}.${fileExt}`;
+      const filePath = `profiles/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('croffle-bucket')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('croffle-bucket')
+        .getPublicUrl(filePath);
+
+      const newUrl = `${data.publicUrl}?t=${Date.now()}`;
+      setAdminProfilePic(newUrl);
+      localStorage.setItem('adminProfilePic', newUrl); // บันทึกลงเครื่อง
+      setIsUploadingProfile(false);
+    } catch (error) {
+      console.error(error);
+      setIsUploadingProfile(false);
+      alert('⚠️ ไม่สามารถอัปโหลดรูปโปรไฟล์ได้ กรุณาลองใหม่อีกครั้งค่ะ');
+    }
+  };
+
+  // ระบบอัปโหลดรูปภาพหลักฐานจัดส่ง (พร้อมป้องกัน URL Cache และสัญลักษณ์ #)
   const handleUpdateOrderPhoto = async (orderId: string, file: File | undefined) => {
     if (!file) {
       const { error } = await supabase
@@ -89,28 +120,23 @@ export default function AdminView({
 
     try {
       const fileExt = file.name.split('.').pop();
-      // แก้ไข: ลบเครื่องหมาย # และอักขระพิเศษออกจาก orderId ป้องกัน URL ขาดหาย
       const safeOrderId = orderId.replace(/[^a-zA-Z0-9]/g, ''); 
       const timestamp = Date.now();
       const fileName = `delivery-${safeOrderId}-${timestamp}.${fileExt}`;
       const filePath = `deliveries/${fileName}`;
 
-      // อัปโหลดไฟล์เข้า Bucket
       const { error: uploadError } = await supabase.storage
         .from('croffle-bucket')
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // ดึงลิงก์ URL สาธารณะของรูปภาพ
       const { data } = supabase.storage
         .from('croffle-bucket')
         .getPublicUrl(filePath);
 
-      // แก้ไข: เติม ?t=... ท้าย URL เพื่อบังคับให้เบราว์เซอร์โหลดรูปใหม่เสมอ (ไม่จำ Cache)
       const publicUrl = `${data.publicUrl}?t=${timestamp}`;
 
-      // บันทึกลิงก์ลง Database พร้อมเปลี่ยนสถานะเป็น Delivered
       const { error: updateError } = await supabase
         .from('orders')
         .update({ deliveryPhoto: publicUrl, status: 'Delivered' })
@@ -126,7 +152,7 @@ export default function AdminView({
     }
   };
 
-  // ✅ 2. ระบบอัปโหลดรูปเมนูอาหารใหม่ (สำหรับฟอร์มเพิ่มเมนู)
+  // ระบบอัปโหลดรูปเมนูอาหารใหม่
   const handleUploadProductImage = async (file: File) => {
     try {
       setIsUploadingImg(true);
@@ -171,13 +197,13 @@ export default function AdminView({
     };
   }, [orders]);
 
-  // ✅ 3. อัปเดตสถานะออเดอร์ลง Database จริง
+  // อัปเดตสถานะออเดอร์ลง Database จริง
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
   };
 
-  // ✅ 4. สลับสถานะสินค้าพร้อมขาย / ของหมด และบันทึกลง Database
+  // สลับสถานะสินค้าพร้อมขาย / ของหมด และบันทึกลง Database
   const handleToggleProductStock = async (productId: string) => {
     const targetProduct = products.find(p => p.id === productId);
     if (!targetProduct) return;
@@ -187,57 +213,7 @@ export default function AdminView({
     await supabase.from('products').update({ inStock: nextStatus }).eq('id', productId);
   };
 
-  // Restock inventory item
-  const handleRestockInventory = async (itemId: string) => {
-    let text = "มีสต็อกเพียงพอ";
-    if (itemId === 'inv-1') text = "มีนมสดพร้อมบริการ (10 ลิตร)";
-    if (itemId === 'inv-2') text = "แป้งครัวซองต์แน่นสต็อก (100 ชิ้น)";
-    if (itemId === 'inv-nutella') text = "ซอสนูเทลล่าสต็อกเต็มพิกัด (3 ลิตร)";
-    if (itemId === 'inv-almond') text = "อัลมอนด์สไลด์อบเต็มสต็อก (3.0 กิโลกรัม)";
-    if (itemId === 'inv-brownie') text = "บราวนี่หั่นเต๋าสต็อกพร้อมใช้งาน (2 กิโลกรัม)";
-    if (itemId === 'inv-oreo') text = "โอริโอ้บดกรอบเต็มสต็อก (2.0 กิโลกรัม)";
-
-    setInventory(prev => prev.map(item => item.id === itemId ? { ...item, status: 'normal', stockText: text } : item));
-    await supabase.from('inventory').update({ status: 'normal', stockText: text }).eq('id', itemId);
-  };
-
-  // Update inventory status (Sufficient / Out of stock)
-  const handleUpdateInventoryStatus = async (itemId: string, status: 'normal' | 'low') => {
-    let defaultText = "มีวัตถุดิบเพียงพอ";
-    const targetItem = inventory.find(i => i.id === itemId);
-    if (targetItem) defaultText = targetItem.stockText;
-
-    if (status === 'normal') {
-      if (itemId === 'inv-1') defaultText = "มีนมสดพร้อมบริการ (10 ลิตร)";
-      else if (itemId === 'inv-2') defaultText = "แป้งครัวซองต์แน่นสต็อก (100 ชิ้น)";
-      else if (itemId === 'inv-nutella') defaultText = "ซอสนูเทลล่าสต็อกเต็มพิกัด (3 ลิตร)";
-      else if (itemId === 'inv-almond') defaultText = "อัลมอนด์สไลด์อบเต็มสต็อก (3.0 กิโลกรัม)";
-      else if (itemId === 'inv-brownie') defaultText = "บราวนี่หั่นเต๋าสต็อกพร้อมใช้งาน (2 กิโลกรัม)";
-      else if (itemId === 'inv-oreo') defaultText = "โอริโอ้บดกรอบเต็มสต็อก (2.0 กิโลกรัม)";
-      else defaultText = "มีวัตถุดิบเพียงพอ";
-    } else {
-      if (itemId === 'inv-1') defaultText = "เหลือต่ำกว่าเกณฑ์ (ควรเติมด่วน)";
-      else if (itemId === 'inv-2') defaultText = "แป้งใกล้หมดแล้ว (เหลือต่ำกว่า 15 ชิ้น)";
-      else if (itemId === 'inv-nutella') defaultText = "นูเทลล่าใกล้หมด (เหลือขวดสุดท้าย)";
-      else if (itemId === 'inv-almond') defaultText = "อัลมอนด์อบเหลือต่ำกว่า 0.5 กิโลกรัม";
-      else if (itemId === 'inv-brownie') defaultText = "บราวนี่เต๋าเหลือน้อย (ควรทำเพิ่ม)";
-      else if (itemId === 'inv-oreo') defaultText = "โอริโอ้บดใกล้หมดแล้ว";
-      else defaultText = "วัตถุดิบไม่พอ/เหลือน้อย";
-    }
-
-    setInventory(prev => prev.map(item => item.id === itemId ? { ...item, status, stockText: defaultText } : item));
-    await supabase.from('inventory').update({ status, stockText: defaultText }).eq('id', itemId);
-  };
-
-  // Save custom description text for inventory item
-  const handleSaveInventoryText = async (itemId: string) => {
-    const nextText = editingInventoryText.trim() || "มีวัตถุดิบเพียงพอ";
-    setInventory(prev => prev.map(item => item.id === itemId ? { ...item, stockText: nextText } : item));
-    setEditingInventoryId(null);
-    await supabase.from('inventory').update({ stockText: nextText }).eq('id', itemId);
-  };
-
-  // ✅ 5. ลบสินค้าออกจาก Database จริง
+  // ลบสินค้าออกจาก Database จริง
   const handleDeleteProduct = async (productId: string) => {
     if (confirm("คุณแน่ใจหรือไม่ว่าต้องการลบเมนูนี้ออกจากร้านค้าชั่วคราว?")) {
       setProducts(prev => prev.filter(p => p.id !== productId));
@@ -245,7 +221,7 @@ export default function AdminView({
     }
   };
 
-  // ✅ 6. บันทึกการแก้ไขราคาลง Database จริง
+  // บันทึกการแก้ไขราคาลง Database จริง
   const handleSaveProductPrice = async (productId: string) => {
     const numPrice = parseFloat(editingPriceValue);
     if (isNaN(numPrice) || numPrice <= 0) {
@@ -323,7 +299,7 @@ export default function AdminView({
     document.body.removeChild(link);
   };
 
-  // ✅ 7. เพิ่มสินค้าใหม่ลง Database จริง
+  // เพิ่มสินค้าใหม่ลง Database จริง
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const priceNum = parseFloat(newProductPrice);
@@ -377,13 +353,27 @@ export default function AdminView({
       <header className="shrink-0 z-40 bg-[#fff8f6]/95 backdrop-blur-md shadow-sm border-b border-[#f2dfd5] md:pt-9 pt-3">
         <div className="flex justify-between items-center px-4 py-3.5 w-full">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-full border-2 border-[#9b4500] overflow-hidden flex-shrink-0 bg-[#f2dfd5] shadow-sm">
+            {/* Clickable Profile Image Upload */}
+            <label className="w-10 h-10 rounded-full border-2 border-[#9b4500] overflow-hidden flex-shrink-0 bg-[#f2dfd5] shadow-sm cursor-pointer relative group block">
               <img 
-                className="w-full h-full object-cover" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAevA0CKN3z97Ebcswee6sN4oIZd5qZygDNCjwYiAgf8H8nsanIw-A5tNBMrxqzI0-0A37nsYKzb0sGblIoLOln5-Xg1c3EtfIlS2QQMBKStq3-8Wf6BVD75DVAVUvTb9V_kyDQSU3ZXZtTzszzXuouIZHxb68TJ4BvWRofYdVRMQ6Twq2Bw06mXQqmI0LeG-WkQpHxP4duqw8yi7hcGvt2E4MZ8PdtE1ADcyIvMlyqbx2_2Jvo6UVtvOXwKr8fOHnRmkhSEx-ERE9y" 
+                className={`w-full h-full object-cover transition-all ${isUploadingProfile ? 'opacity-50' : 'group-hover:opacity-70'}`} 
+                src={adminProfilePic} 
                 alt="โปรไฟล์แอดมิน"
               />
-            </div>
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                <Camera size={14} className="text-white" />
+              </div>
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                disabled={isUploadingProfile}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUploadAdminProfile(file);
+                }}
+              />
+            </label>
             <div className="flex flex-col">
               <h1 className="text-base font-bold text-[#9b4500] flex items-center gap-1">
                 แอดมิน <span className="text-[10px] bg-[#9b4500]/10 text-[#9b4500] font-bold px-1.5 py-0.5 rounded-full uppercase">Live</span>
@@ -452,7 +442,6 @@ export default function AdminView({
                     </div>
                   </div>
                 </div>
-                <p className="text-[9px] text-[#897266]/70 text-center font-medium">สถิติจำนวนคนดูอ้างอิงจากการเข้าหน้าเว็บบนเบราว์เซอร์จริง</p>
               </div>
 
               {/* Shop hours and operational status */}
@@ -662,55 +651,6 @@ export default function AdminView({
                 </div>
               </div>
             </div>
-
-            {/* Inventory Alerts section */}
-            <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-bold text-[#231914] flex items-center justify-between">
-                <span>วัตถุดิบและแจ้งเตือนสต็อก</span>
-                <span className="text-xs text-[#897266] font-normal">คลิกเพื่อรับของสต็อก</span>
-              </h3>
-              
-              <div className="flex flex-col gap-3">
-                {inventory.map((item) => {
-                  const isLow = item.status === 'low';
-                  return (
-                    <div 
-                      key={item.id}
-                      className={`p-3.5 rounded-2xl bg-white border flex items-center justify-between shadow-sm transition-all duration-150 ${
-                        isLow ? 'border-red-200 bg-red-50/10' : 'border-[#ddc1b3]/30'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          isLow ? 'bg-red-100 text-red-600' : 'bg-[#feeae0] text-[#9b4500]'
-                        }`}>
-                          <Package size={18} />
-                        </div>
-                        <div>
-                          <p className="font-bold text-xs text-[#231914]">{item.name}</p>
-                          <p className={`text-[10px] font-semibold ${isLow ? 'text-red-500' : 'text-stone-400'}`}>
-                            {item.stockText}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {isLow ? (
-                        <button 
-                          onClick={() => handleRestockInventory(item.id)}
-                          className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-full shadow-sm transition-all duration-150 active:scale-95"
-                        >
-                          เติมสต็อก
-                        </button>
-                      ) : (
-                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                          เพียงพอ
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </motion.div>
         )}
 
@@ -869,7 +809,7 @@ export default function AdminView({
           </motion.div>
         )}
 
-        {/* MENU & STOCK MANAGER TAB */}
+        {/* MENU MANAGER TAB (Removed Inventory section) */}
         {activeAdminTab === 'menu_stock' && (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -1003,126 +943,6 @@ export default function AdminView({
                 </motion.form>
               )}
             </AnimatePresence>
-
-            {/* INVENTORY / RAW MATERIALS STOCK SECTION */}
-            <div className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-[#ddc1b3]/30 shadow-sm">
-              <div className="border-b border-[#fff1eb] pb-3 flex justify-between items-center">
-                <div>
-                  <h3 className="text-sm font-bold text-[#231914] flex items-center gap-1.5">
-                    <Package size={16} className="text-[#9b4500]" />
-                    <span>จัดการวัตถุดิบและคลังสต็อก</span>
-                  </h3>
-                  <p className="text-[10px] text-[#564338]/80">ปรับสถานะและระบุปริมาณที่เหลือของวัตถุดิบหลัก</p>
-                </div>
-                <span className="text-[9px] bg-[#9b4500]/10 text-[#9b4500] font-bold px-2 py-0.5 rounded-full">
-                  มี {inventory.length} รายการ
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                {inventory.map((item) => {
-                  const isLow = item.status === 'low';
-                  const isTextEditing = editingInventoryId === item.id;
-                  
-                  return (
-                    <div 
-                      key={item.id}
-                      className={`p-3.5 rounded-2xl border transition-all duration-150 flex flex-col gap-3 ${
-                        isLow ? 'border-red-200 bg-red-50/5' : 'border-[#ddc1b3]/20 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                            isLow ? 'bg-red-100 text-red-600' : 'bg-[#feeae0] text-[#9b4500]'
-                          }`}>
-                            <Package size={16} />
-                          </div>
-                          <div>
-                            <p className="font-extrabold text-xs text-[#231914]">{item.name}</p>
-                            
-                            {isTextEditing ? (
-                              <div className="flex items-center gap-1.5 mt-1">
-                                <input 
-                                  type="text"
-                                  value={editingInventoryText}
-                                  onChange={(e) => setEditingInventoryText(e.target.value)}
-                                  className="px-2 py-1 border border-[#ddc1b3] rounded-lg text-[10px] w-36 bg-[#fff8f6] focus:outline-none focus:ring-1 focus:ring-[#9b4500]"
-                                  placeholder="ระบุปริมาณ/รายละเอียด..."
-                                />
-                                <button 
-                                  type="button"
-                                  onClick={() => handleSaveInventoryText(item.id)}
-                                  className="bg-emerald-600 text-white p-1 rounded-md hover:bg-emerald-700 shadow-sm active:scale-95"
-                                  title="บันทึก"
-                                >
-                                  <Check size={10} className="stroke-[3]" />
-                                </button>
-                                <button 
-                                  type="button"
-                                  onClick={() => setEditingInventoryId(null)}
-                                  className="bg-stone-200 text-stone-600 p-1 rounded-md hover:bg-stone-300 shadow-sm active:scale-95"
-                                  title="ยกเลิก"
-                                >
-                                  <X size={10} className="stroke-[3]" />
-                                </button>
-                              </div>
-                            ) : (
-                              <p className={`text-[10px] font-semibold flex items-center gap-1 mt-0.5 ${isLow ? 'text-red-500' : 'text-stone-400'}`}>
-                                <span>{item.stockText}</span>
-                                <button 
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingInventoryId(item.id);
-                                    setEditingInventoryText(item.stockText);
-                                  }}
-                                  className="p-0.5 text-stone-400 hover:text-[#9b4500] transition"
-                                  title="แก้ไขข้อความสต็อก"
-                                >
-                                  <Edit2 size={10} />
-                                </button>
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Status select options: เพียงพอ vs ไม่พอ */}
-                      <div className="grid grid-cols-2 gap-2 mt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateInventoryStatus(item.id, 'normal')}
-                          className={`py-2 rounded-xl text-xs font-bold transition-all duration-150 active:scale-98 flex items-center justify-center gap-1.5 border ${
-                            !isLow 
-                              ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm' 
-                              : 'bg-white text-stone-400 border-stone-200 hover:bg-stone-50'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${!isLow ? 'bg-white' : 'bg-stone-300'}`} />
-                          <span>เพียงพอ</span>
-                        </button>
-                        
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateInventoryStatus(item.id, 'low')}
-                          className={`py-2 rounded-xl text-xs font-bold transition-all duration-150 active:scale-98 flex items-center justify-center gap-1.5 border ${
-                            isLow 
-                              ? 'bg-red-500 text-white border-red-500 shadow-sm' 
-                              : 'bg-white text-stone-400 border-stone-200 hover:bg-stone-50'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${isLow ? 'bg-white animate-pulse' : 'bg-stone-300'}`} />
-                          <span>ไม่พอ (เหลือน้อย)</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Separator line */}
-            <div className="h-px bg-[#ddc1b3]/20 my-1" />
 
             {/* List of Products edit & stock toggle */}
             <div className="flex flex-col gap-3.5">
@@ -1314,7 +1134,7 @@ export default function AdminView({
               </form>
             </motion.div>
 
-            {/* TECHNICAL CONTROL PANEL CARD */}
+            {/* TECHNICAL CONTROL PANEL CARD (Cleaned) */}
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1324,61 +1144,11 @@ export default function AdminView({
             >
               <div className="border-b border-[#fff1eb] pb-3 text-center">
                 <Shield className="text-[#9b4500] mx-auto mb-1" size={28} />
-                <h2 className="text-sm font-bold text-[#231914]">แผงควบคุมระบบเทคนิค</h2>
-                <p className="text-[10px] text-[#564338] mt-0.5">จัดการล้างข้อมูลสาธิตและทดสอบสถานการณ์สำหรับผู้ดูแลร้าน</p>
+                <h2 className="text-sm font-bold text-[#231914]">จัดการระบบคิวและทำความสะอาดออเดอร์</h2>
+                <p className="text-[10px] text-[#564338] mt-0.5">ล้างข้อมูลออเดอร์ที่เสร็จสิ้นแล้วเพื่อเคลียร์พื้นที่การทำงาน</p>
               </div>
 
               <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between text-xs py-2 border-b border-[#fff8f6]">
-                  <div>
-                    <p className="font-bold text-[#231914]">รีเซ็ตข้อมูลสาธิตทั้งหมด</p>
-                    <p className="text-[10px] text-stone-400 leading-tight">คืนสถานะออเดอร์ ข้อมูลเมนู และจำนวนสต็อกเริ่มต้นจากรูปภาพ</p>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      if(confirm("คุณแน่ใจหรือไม่ที่จะทำการรีเซ็ตข้อมูลทั้งหมดกลับสู่ค่าเริ่มต้นจากรูปต้นฉบับ?")) {
-                        onResetDefaults();
-                      }
-                    }}
-                    className="bg-[#9b4500] hover:bg-[#ff8c42] text-white text-xs font-bold px-4 py-2 rounded-full shadow-sm transition-all duration-150 active:scale-95 flex items-center gap-1.5"
-                  >
-                    <RefreshCw size={12} />
-                    <span>รีเซ็ตทันที</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between text-xs py-2 border-b border-[#fff8f6]">
-                  <div>
-                    <p className="font-bold text-[#231914]">จำลองสถานการณ์ออเดอร์</p>
-                    <p className="text-[10px] text-stone-400 leading-tight">จำลองมีลูกค้า สั่งมะพร้าวนมสดพรีเมียมคิวถัดไปอัตโนมัติ</p>
-                  </div>
-                  <button 
-                    onClick={async () => {
-                      const idNum = Math.floor(4403 + Math.random() * 50);
-                      const mockOrder: Order = {
-                        id: `#${idNum}`,
-                        customerName: "คุณแอมมี่ คอนโดเอ",
-                        roomNo: "ตึก A ชั้น 8 ห้อง 811",
-                        phone: "086-456-7890",
-                        items: [
-                          { productName: "มะพร้าวนมสด", quantity: 1, price: 45, optionsSummary: "ฟรีไข่มุก!, หวานน้อย 50%" },
-                          { productName: "ครอฟเฟิล ออริจินัล", quantity: 2, price: 39, optionsSummary: "สูตรปกติ" }
-                        ],
-                        totalPrice: 123,
-                        status: "Pending",
-                        createdAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' วันนี้'
-                      };
-                      setOrders(prev => [mockOrder, ...prev]);
-                      await supabase.from('orders').insert([mockOrder]);
-                      alert("เพิ่มออเดอร์จำลองคิวใหม่สำเร็จแล้วค่ะ! ลองกดเข้าไปดูที่แท็บ 'ออเดอร์'");
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-full shadow-sm transition-all duration-150 active:scale-95 flex items-center gap-1"
-                  >
-                    <Plus size={12} />
-                    <span>สุ่มสั่ง 1 คิว</span>
-                  </button>
-                </div>
-
                 <div className="flex items-center justify-between text-xs py-2">
                   <div>
                     <p className="font-bold text-[#231914]">ล้างคิวออเดอร์ที่จัดส่งแล้ว</p>
@@ -1386,9 +1156,11 @@ export default function AdminView({
                   </div>
                   <button 
                     onClick={async () => {
-                      setOrders(prev => prev.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled'));
-                      await supabase.from('orders').delete().in('status', ['Delivered', 'Cancelled']);
-                      alert("ล้างคิวที่เสร็จสมบูรณ์เรียบร้อยแล้วค่ะ!");
+                      if (confirm("คุณแน่ใจหรือไม่ที่จะล้างออเดอร์ที่จัดส่งแล้วหรือยกเลิกทิ้งทั้งหมด?")) {
+                        setOrders(prev => prev.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled'));
+                        await supabase.from('orders').delete().in('status', ['Delivered', 'Cancelled']);
+                        alert("ล้างคิวที่เสร็จสมบูรณ์เรียบร้อยแล้วค่ะ!");
+                      }
                     }}
                     className="bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold px-4 py-2 rounded-full shadow-sm transition-all duration-150 active:scale-95 border border-[#ddc1b3]/30"
                   >
@@ -1442,7 +1214,7 @@ export default function AdminView({
             }`}
           >
             <Coffee size={20} className={activeAdminTab === 'menu_stock' ? 'stroke-[2.5]' : 'stroke-[1.8]'} />
-            <span className="text-[10px] mt-1">เมนู/คลัง</span>
+            <span className="text-[10px] mt-1">ตั้งค่าเมนู</span>
           </button>
 
           <button 
@@ -1454,7 +1226,7 @@ export default function AdminView({
             }`}
           >
             <Settings size={20} className={activeAdminTab === 'settings' ? 'stroke-[2.5]' : 'stroke-[1.8]'} />
-            <span className="text-[10px] mt-1">ตั้งค่า</span>
+            <span className="text-[10px] mt-1">ตั้งค่าอื่นๆ</span>
           </button>
         </div>
       </nav>
