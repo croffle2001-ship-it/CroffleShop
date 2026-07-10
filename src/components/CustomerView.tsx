@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Star, AlertTriangle, Plus, Minus, ShoppingCart, 
-  Home, ClipboardList, Check, X, ShieldAlert, Heart, RefreshCw, Send
+  Home, ClipboardList, Check, X, ShieldAlert, Heart, RefreshCw, Send, Camera 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, CartItem, Order, Category, OrderStatus, ShopConfig } from '../types';
@@ -326,7 +326,6 @@ export default function CustomerView({
                 
                 <div className="overflow-x-auto no-scrollbar flex gap-4 pb-2 snap-x snap-mandatory">
                   {featuredProducts.map((p) => {
-                    const hasToppings = p.toppings && p.toppings.length > 0;
                     return (
                       <div 
                         key={`featured-${p.id}`}
@@ -601,7 +600,7 @@ export default function CustomerView({
                         <p><strong>ที่อยู่:</strong> {order.roomNo}</p>
                         {order.note && <p className="text-[11px] text-[#ba1a1a]"><strong>โน้ตพิเศษ:</strong> {order.note}</p>}
                       </div>
-                        {/* ✅ แทรกส่วนนี้ลงไปตรงนี้ครับ! */}
+                        {/* ✅ หลักฐานการจัดส่งที่นำเข้ามา (แก้ไข Import แล้ว) */}
                       {order.status === 'Delivered' && order.deliveryPhoto && (
                         <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl animate-in fade-in zoom-in duration-300">
                           <p className="text-[10px] font-bold text-emerald-700 mb-2 flex items-center gap-1">
@@ -917,7 +916,7 @@ export default function CustomerView({
               </p>
 
               {/* Toppings Multi-Selector */}
-              {selectedProduct.toppings && selectedProduct.toppings.length > 0 && selectedProduct.name !== 'ทูโทรน' && selectedProduct.name !== 'ทูโทน' && (
+              {Array.isArray(selectedProduct.toppings) && selectedProduct.toppings.length > 0 && selectedProduct.name !== 'ทูโทรน' && selectedProduct.name !== 'ทูโทน' && (
                 <div className="mb-5 flex flex-col gap-2">
                   <h4 className="text-xs font-bold text-[#231914] px-1">เปลี่ยนท็อปปิ้งบนหน้าครอฟเฟิล (ชิ้นแรกฟรี ชิ้นถัดไป +฿5):</h4>
                   <div className="flex flex-col gap-2 bg-white p-3 rounded-2xl border border-[#ddc1b3]/20">
