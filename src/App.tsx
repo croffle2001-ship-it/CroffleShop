@@ -29,13 +29,12 @@ export default function App() {
   });
 
   const [totalViews, setTotalViews] = useState<number>(0);
-  const [currentOnline, setCurrentOnline] = useState<number>(0); // เริ่มต้นที่ 0 
+  const [currentOnline, setCurrentOnline] = useState<number>(0);
 
   const [adminUsername, setAdminUsername] = useState<string>('narongrit');
   const [adminPassword, setAdminPassword] = useState<string>('081144');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
 
-  // เก็บ Ref ของ Channel เพื่อให้อัปเดตสถานะตอนสลับหน้าได้
   const channelRef = useRef<any>(null);
 
   useEffect(() => {
@@ -74,25 +73,31 @@ export default function App() {
         });
       }
 
-      // แก้ไขให้ยอดเข้าชมทั้งหมดทำงานได้ถูกต้อง (ใช้ maybeSingle ป้องกัน Error เวลาเริ่มโปรเจกต์ใหม่)
+      // ระบบนับยอดวิว (ป้องกัน RLS บล็อกและจัดการ Error ให้ละเอียดขึ้น)
       try {
         const { data: viewsData, error: viewsErr } = await supabase.from('page_views').select('count').eq('id', 1).maybeSingle();
+        
+        let newCount = 1;
         if (viewsData) {
-          const updatedCount = viewsData.count + 1;
-          setTotalViews(updatedCount);
-          await supabase.from('page_views').update({ count: updatedCount }).eq('id', 1);
-        } else if (!viewsErr) {
-          setTotalViews(1);
-          await supabase.from('page_views').insert([{ id: 1, count: 1 }]);
+          newCount = (viewsData.count || 0) + 1;
+          setTotalViews(newCount);
+          await supabase.from('page_views').update({ count: newCount }).eq('id', 1);
+        } else {
+          setTotalViews(newCount); // เซ็ตเป็น 1 ไว้ก่อนให้หน้าเว็บอัปเดต
+          if (!viewsErr) {
+            await supabase.from('page_views').insert([{ id: 1, count: newCount }]);
+          } else {
+            console.error("⚠️ ไม่สามารถดึงยอดวิวจาก Supabase ได้ (รบกวนเช็คว่ามีตาราง page_views หรือปิด RLS แล้วหรือยัง):", viewsErr.message);
+          }
         }
       } catch (err) {
         console.error("Error tracking views:", err);
+        setTotalViews(prev => prev === 0 ? 1 : prev);
       }
     };
 
     fetchDatabase();
 
-    // ฟังอัปเดตแบบ Realtime ของ 'ยอดผู้เข้าชมทั้งหมด'
     const viewsSubscription = supabase
       .channel('public:page_views')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'page_views' }, (payload: any) => {
@@ -125,7 +130,6 @@ export default function App() {
       .on('presence', { event: 'sync' }, () => {
         const state = userStatusChannel.presenceState();
         let customerCount = 0;
-        // นับยอดเฉพาะคนที่มีสถานะ view เป็น 'customer' (ไม่นับแอดมิน)
         for (const key in state) {
           const presences: any = state[key];
           if (presences && presences.length > 0 && presences[0].view === 'customer') {
@@ -136,7 +140,6 @@ export default function App() {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // แนบสถานะ view ปัจจุบันไปด้วยตอนเริ่มต้น
           await userStatusChannel.track({ view: viewRef.current, online_at: new Date().toISOString() });
         }
       });
@@ -148,7 +151,6 @@ export default function App() {
     };
   }, []);
 
-  // เมื่อผู้ใช้สลับหน้า Customer <-> Admin ให้อัปเดตสถานะ (เพื่อให้ยอดคนออนไลน์เปลี่ยนทันที)
   useEffect(() => {
     if (channelRef.current && channelRef.current.state === 'joined') {
       channelRef.current.track({ view: view, online_at: new Date().toISOString() });
