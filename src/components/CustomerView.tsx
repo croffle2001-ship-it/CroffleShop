@@ -49,11 +49,14 @@ export default function CustomerView({
   const [orderNote, setOrderNote] = useState('');
   const [deliveryArea, setDeliveryArea] = useState<string>('');
   
-  // --- ตัวแปรใหม่สำหรับ Payment ---
+  // Payment
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'qr'>('cash');
   
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
+
+  // 🌟 ตัวแปรใหม่สำหรับจำเบอร์โทรลูกค้า เพื่อให้โชว์เฉพาะออเดอร์ของตัวเอง
+  const [sessionPhone, setSessionPhone] = useState<string>('');
 
   // List of all categories available
   const categories: (Category | 'all' | 'เมนูขายดี')[] = ['all', 'เมนูขายดี', 'ขนม', 'เครื่องดื่ม'];
@@ -76,17 +79,14 @@ export default function CustomerView({
     });
   }, [products, searchQuery, selectedCategory]);
 
-  // Featured items for top carousel (Must Try! or isMustTry)
   const featuredProducts = useMemo(() => {
     return products.filter(p => p.name === 'วิปครีมบราวนี่');
   }, [products]);
 
-  // Total items in cart
   const cartTotalItems = useMemo(() => {
     return cart.reduce((total, item) => total + item.quantity, 0);
   }, [cart]);
 
-  // Total price in cart
   const cartTotalPrice = useMemo(() => {
     return cart.reduce((total, item) => {
       const toppingsCost = item.selectedToppings.length > 1 ? (item.selectedToppings.length - 1) * 5 : 0;
@@ -94,7 +94,11 @@ export default function CustomerView({
     }, 0);
   }, [cart]);
 
-  // Handle open customization drawer
+  // 🌟 ฟิลเตอร์ออเดอร์ให้โชว์เฉพาะของลูกค้ารายนี้เท่านั้น (อิงจากเบอร์โทร)
+  const myOrders = useMemo(() => {
+    return orders.filter(o => o.phone === sessionPhone);
+  }, [orders, sessionPhone]);
+
   const handleOpenCustomization = (product: Product) => {
     if (!product.inStock) return;
     setSelectedProduct(product);
@@ -104,7 +108,6 @@ export default function CustomerView({
     setItemNote('');
   };
 
-  // Toggle topping selection
   const handleToggleTopping = (topping: { name: string; price: number }) => {
     if (selectedProduct?.name === 'ทูโทรน' || selectedProduct?.name === 'ทูโทน') return;
     setSelectedToppings(prev => {
@@ -122,14 +125,12 @@ export default function CustomerView({
     });
   };
 
-  // Calculate customized total price for drawer
   const drawerItemTotal = useMemo(() => {
     if (!selectedProduct) return 0;
     const toppingsPrice = selectedToppings.length > 1 ? (selectedToppings.length - 1) * 5 : 0;
     return (selectedProduct.price + toppingsPrice) * itemQuantity;
   }, [selectedProduct, selectedToppings, itemQuantity]);
 
-  // Add customized item to cart
   const handleAddToCart = () => {
     if (!selectedProduct) return;
 
@@ -158,7 +159,6 @@ export default function CustomerView({
     setSelectedProduct(null);
   };
 
-  // Cart quantity controls
   const handleUpdateCartQuantity = (itemId: string, change: number) => {
     setCart(prev => {
       return prev.map(item => {
@@ -171,7 +171,6 @@ export default function CustomerView({
     });
   };
 
-  // Handle Checkout Submit
   const handleCheckout = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !roomNo.trim()) {
@@ -193,11 +192,13 @@ export default function CustomerView({
       ? `${deliveryArea} - บริษัท ${companyName.trim()} - ${roomNo}`
       : `${deliveryArea} - ${roomNo}`;
 
-    // แทรกช่องทางชำระเงินเข้าไปในโน้ต เพื่อให้แอดมินเห็นง่ายๆ
     const paymentLabel = paymentMethod === 'qr' ? '📱 โอนเงิน(รอตรวจสลิป)' : '💵 เงินสดปลายทาง';
     const finalNote = `[ชำระด้วย: ${paymentLabel}] ${orderNote}`.trim();
 
     setTimeout(() => {
+      // 🌟 บันทึกเบอร์โทรของลูกค้าเข้าระบบความจำ เพื่อเอาไว้โชว์หน้าออเดอร์
+      setSessionPhone(phone);
+
       onPlaceOrder(customerName, phone, fullAddress, finalNote);
       setIsSubmittingOrder(false);
       setCart([]); 
@@ -526,7 +527,8 @@ export default function CustomerView({
               </div>
             )}
 
-            {orders.length === 0 ? (
+            {/* 🌟 แสดงเฉพาะออเดอร์ที่สั่งด้วยเบอร์โทรนี้ */}
+            {myOrders.length === 0 ? (
               <div className="py-16 text-center text-[#897266] flex flex-col items-center gap-3 bg-white/50 rounded-3xl border border-[#ddc1b3]/20">
                 <ClipboardList size={48} className="opacity-20" />
                 <p className="text-sm font-semibold">คุณยังไม่มีประวัติการจัดส่งในเซสชั่นนี้ค่ะ</p>
@@ -540,7 +542,7 @@ export default function CustomerView({
               </div>
             ) : (
               <div className="flex flex-col gap-4">
-                {orders.map((order) => {
+                {myOrders.map((order) => {
                   let statusBg = "bg-amber-50 text-amber-700 border-amber-200";
                   let statusThText = "รอดำเนินการ";
                   
@@ -1063,7 +1065,7 @@ export default function CustomerView({
           >
             <ClipboardList size={20} className={activeTab === 'orders' ? 'stroke-[2.5]' : 'stroke-[1.8]'} />
             <span className="text-[10px] mt-1">ออเดอร์</span>
-            {orders.length > 0 && (
+            {myOrders.length > 0 && (
               <span className="absolute top-0 right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
             )}
           </button>
