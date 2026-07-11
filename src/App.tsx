@@ -142,8 +142,7 @@ export default function App() {
     return currentTimeTick >= shopConfig.openTime && currentTimeTick <= shopConfig.closeTime;
   }, [shopConfig, currentTimeTick]);
 
-  // ✅ แก้ไข: ให้ฟังก์ชันส่งคืนเลขคิวจริง (newOrderId) กลับไปให้หน้าลูกค้าแสดงผล
-  const handlePlaceOrder = async (customerName: string, phone: string, roomNo: string, note: string) => {
+  const handlePlaceOrder = async (customerName: string, phone: string, roomNo: string, note: string, paymentSlipUrl?: string) => {
     const maxId = orders.reduce((max, o) => {
       const num = parseInt(o.id.replace('#', ''), 10);
       return !isNaN(num) && num > max ? num : max;
@@ -180,7 +179,8 @@ export default function App() {
       totalPrice: totalCalculatedPrice,
       status: 'Pending',
       createdAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' วันนี้',
-      note: note.trim() || undefined
+      note: note.trim() || undefined,
+      paymentSlipUrl
     };
 
     const { error } = await supabase.from('orders').insert([newOrder]);
@@ -191,7 +191,7 @@ export default function App() {
       return null; 
     } else {
       setCart([]);
-      return newOrderId; // โยนเลขคิวกลับไปหาหน้าลูกค้า!
+      return newOrderId; 
     }
   };
 
