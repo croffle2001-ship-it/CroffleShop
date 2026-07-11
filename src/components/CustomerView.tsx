@@ -244,8 +244,8 @@ export default function CustomerView({
         <div className="flex justify-between items-center px-4 py-3 w-full">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full border-2 border-[#9b4500] overflow-hidden flex-shrink-0 bg-[#feeae0] shadow-sm">
-              <img className="w-full h-full object-cover" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150" alt="Logo"/>
-            </div>
+                <img className="w-full h-full object-cover" src="/Logo.jpg" alt="โลโก้ร้านครอฟเฟิลไอ้แว่น"/>
+              </div>
             <div className="flex flex-col">
               <h1 className="text-xl font-bold text-[#9b4500] tracking-tight flex items-center gap-1">
                 ครอฟเฟิลไอ้แว่น <span className="text-sm bg-[#ff8c42]/10 px-1.5 py-0.5 rounded text-[#9b4500] font-normal">กม.44</span>
