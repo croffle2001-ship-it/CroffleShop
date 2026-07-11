@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, CartItem, Order, Category, OrderStatus, ShopConfig } from '../types';
-import { supabase } from '../supabaseClient'; // 👈 เพิ่มการเรียกใช้ Supabase
+import { supabase } from '../supabaseClient';
 
 interface CustomerViewProps {
   products: Product[];
@@ -48,7 +48,7 @@ export default function CustomerView({
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
   
-  // 👈 เพิ่ม State สำหรับจัดการรูปสลิป
+  // State สำหรับเก็บรูปภาพสลิป
   const [paymentSlipFile, setPaymentSlipFile] = useState<File | null>(null);
   const [paymentSlipPreview, setPaymentSlipPreview] = useState<string | null>(null);
 
@@ -179,16 +179,16 @@ export default function CustomerView({
     });
   };
 
-  // 👈 อัปเดตฟังก์ชันจัดการการ Checkout และการอัปโหลดสลิป
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !roomNo.trim()) { alert("กรุณากรอกข้อมูลผู้รับและที่อยู่จัดส่งให้ครบถ้วนค่ะ"); return; }
     if (!deliveryArea) { alert("กรุณาเลือกพื้นที่จัดส่ง (ส่งเฉพาะ บ้านเอื้ออาทร กม.44 หรือ โครงการ MMC เท่านั้น)"); return; }
     if (deliveryArea === 'โครงการ MMC' && !companyName.trim()) { alert("กรุณาระบุชื่อบริษัทสำหรับโครงการ MMC ค่ะ"); return; }
     
+    // 🚨 บังคับตรวจสอบสลิปตรงนี้แบบเด็ดขาด!
     if (paymentMethod === 'qr' && !paymentSlipFile) { 
-      alert("กรุณาแนบสลิปการโอนเงินเพื่อยืนยันออเดอร์ด้วยค่ะ"); 
-      return; 
+      alert("⚠️ ไม่พบสลิปการโอนเงิน!\nกรุณาแนบรูปสลิปการโอนเงินเพื่อยืนยันออเดอร์ด้วยค่ะ"); 
+      return; // หยุดการส่งออเดอร์ทันที
     }
 
     setIsSubmittingOrder(true);
@@ -479,7 +479,6 @@ export default function CustomerView({
                             <div className="w-40 h-40 bg-stone-100 rounded-lg flex flex-col items-center justify-center text-stone-400 gap-2 border border-dashed border-stone-300"><Camera size={24} /><span className="text-[10px]">รอแอดมินอัปเดต QR</span></div>
                           )}
                           
-                          {/* 👈 UI ใหม่สำหรับการอัปโหลดสลิป */}
                           <div className="w-full mt-3">
                             <label className={`w-full cursor-pointer bg-white border-2 border-dashed ${paymentSlipPreview ? 'border-emerald-400' : 'border-[#ddc1b3] hover:border-[#9b4500]'} rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all`}>
                               {paymentSlipPreview ? (
@@ -509,8 +508,8 @@ export default function CustomerView({
                     </AnimatePresence>
                   </div>
 
-                  {/* 👈 อัปเดตเงื่อนไขปุ่ม ยืนยันออเดอร์ */}
-                  <button type="submit" disabled={isSubmittingOrder || !isShopOpen || (paymentMethod === 'qr' && !paymentSlipFile)} className="w-full mt-2 bg-[#9b4500] hover:bg-[#ff8c42] disabled:bg-stone-300 disabled:cursor-not-allowed text-white py-3.5 rounded-full font-bold text-sm shadow-md transition-all duration-150 flex items-center justify-center gap-2 active:scale-98">
+                  {/* 🚨 ปุ่มแก้ไขใหม่: ปลดล็อคให้กดได้เสมอ แต่ถ้ากดแล้วไม่แนบสลิป จะถูกแจ้งเตือนแทน */}
+                  <button type="submit" disabled={isSubmittingOrder || !isShopOpen} className="w-full mt-2 bg-[#9b4500] hover:bg-[#ff8c42] disabled:bg-stone-300 disabled:cursor-not-allowed text-white py-3.5 rounded-full font-bold text-sm shadow-md transition-all duration-150 flex items-center justify-center gap-2 active:scale-98">
                     {isSubmittingOrder ? (<><RefreshCw size={16} className="animate-spin" /><span>กำลังส่งคำสั่งซื้อและหลักฐาน...</span></>) : !isShopOpen ? (<><ShieldAlert size={16} /><span>ขณะนี้ร้านปิดให้บริการชั่วคราว</span></>) : (<><Send size={16} /><span>ยืนยันออเดอร์และเตาอบ (฿{cartTotalPrice})</span></>)}
                   </button>
                 </form>

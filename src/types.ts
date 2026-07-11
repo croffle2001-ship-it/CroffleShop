@@ -60,16 +60,3 @@ export interface ShopConfig {
   closeTime: string;
 }
 
-export interface Order {
-  id: string;
-  customerName: string;
-  phone: string;
-  roomNo: string;
-  items: any[];
-  totalPrice: number;
-  status: OrderStatus;
-  createdAt: string;
-  note?: string;
-  deliveryPhoto?: string;
-  paymentSlipUrl?: string; // 👈 เพิ่มบรรทัดนี้
-}
