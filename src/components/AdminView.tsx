@@ -1184,6 +1184,77 @@ export default function AdminView({
               </form>
             </motion.div>
 
+            {/* QR CODE SETTINGS CARD (ส่วนที่เพิ่มใหม่สำหรับแนบ QR Code) */}
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-[#ddc1b3]/30 shadow-sm"
+            >
+              <div className="border-b border-[#fff1eb] pb-3 text-center">
+                <Camera className="text-[#9b4500] mx-auto mb-1" size={26} />
+                <h2 className="text-sm font-bold text-[#231914]">ตั้งค่าช่องทางชำระเงิน (QR Code)</h2>
+                <p className="text-[10px] text-[#564338] mt-0.5">แนบรูป QR Code เพื่อให้ลูกค้าสแกนชำระเงินที่หน้าร้าน</p>
+              </div>
+
+              <div className="flex flex-col items-center gap-3">
+                {shopConfig.qrCodeUrl ? (
+                  <div className="relative group">
+                    <img 
+                      src={shopConfig.qrCodeUrl} 
+                      alt="QR Code ร้านค้า" 
+                      className="w-32 h-32 object-contain rounded-xl border border-[#ddc1b3]/30 shadow-sm"
+                    />
+                    <button 
+                      onClick={() => setShopConfig(prev => ({ ...prev, qrCodeUrl: undefined }))}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-md hover:bg-red-600 transition-colors"
+                      title="ลบ QR Code"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="w-32 h-32 bg-[#fff8f6] border border-dashed border-[#ddc1b3]/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-[#feeae0]/40 transition-all">
+                    <Camera size={24} className="text-[#9b4500] mb-2" />
+                    <span className="text-[10px] text-[#564338] font-bold">อัปโหลดรูป QR</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const fileExt = file.name.split('.').pop();
+                            const fileName = `qr-payment-${Date.now()}.${fileExt}`;
+                            const filePath = `settings/${fileName}`;
+
+                            const { error: uploadError } = await supabase.storage
+                              .from('croffle-bucket')
+                              .upload(filePath, file, { upsert: true });
+
+                            if (uploadError) throw uploadError;
+
+                            const { data } = supabase.storage
+                              .from('croffle-bucket')
+                              .getPublicUrl(filePath);
+
+                            // เพิ่ม ?t=Date.now() เพื่อป้องกันปัญหา Browser จำแคชรูปเก่า
+                            setShopConfig(prev => ({ ...prev, qrCodeUrl: `${data.publicUrl}?t=${Date.now()}` }));
+                            alert('✅ อัปโหลด QR Code สำเร็จแล้วค่ะ!');
+                          } catch (error) {
+                            console.error(error);
+                            alert('⚠️ เกิดข้อผิดพลาดในการอัปโหลด QR Code กรุณาลองใหม่อีกครั้ง');
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </motion.div>
+
             {/* TECHNICAL CONTROL PANEL CARD (Cleaned) */}
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
@@ -1207,9 +1278,18 @@ export default function AdminView({
                   <button 
                     onClick={async () => {
                       if (confirm("คุณแน่ใจหรือไม่ที่จะล้างออเดอร์ที่จัดส่งแล้วหรือยกเลิกทิ้งทั้งหมด?")) {
-                        setOrders(prev => prev.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled'));
-                        await supabase.from('orders').delete().in('status', ['Delivered', 'Cancelled']);
-                        alert("ล้างคิวที่เสร็จสมบูรณ์เรียบร้อยแล้วค่ะ!");
+                        try {
+                          const { error: err1 } = await supabase.from('orders').delete().eq('status', 'Delivered');
+                          const { error: err2 } = await supabase.from('orders').delete().eq('status', 'Cancelled');
+                          
+                          if (err1 || err2) throw new Error("Database deletion failed");
+                          
+                          setOrders(prev => prev.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled'));
+                          alert("✅ ล้างคิวที่เสร็จสมบูรณ์เรียบร้อยแล้วค่ะ!");
+                        } catch (error) {
+                          console.error(error);
+                          alert("⚠️ เกิดข้อผิดพลาด ไม่สามารถล้างคิวบนฐานข้อมูลได้ กรุณาลองใหม่อีกครั้ง");
+                        }
                       }
                     }}
                     className="bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold px-4 py-2 rounded-full shadow-sm transition-all duration-150 active:scale-95 border border-[#ddc1b3]/30"
