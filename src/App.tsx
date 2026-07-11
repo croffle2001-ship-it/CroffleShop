@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Product, Order, InventoryItem, CartItem, OrderStatus, ShopConfig, Category } from './types';
 import { INITIAL_PRODUCTS, INITIAL_ORDERS } from './data';
 import CustomerView from './components/CustomerView';
@@ -7,16 +7,21 @@ import AdminLogin from './components/AdminLogin';
 import { supabase } from './supabaseClient';
 
 export default function App() {
-  // Navigation State
   const [view, setView] = useState<'customer' | 'admin'>('customer');
+  
+  // ใช้ useRef เพื่อดักจับว่าตอนนี้ผู้ใช้อยู่หน้าไหน (ใช้สำหรับแยกแจ้งเตือน)
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
 
-  // Core States เชื่อมต่อตรงกับ Backend Supabase
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('croffle_cart_v8');
     return saved ? JSON.parse(saved) : [];
   });
+  
   const [shopConfig, setShopConfig] = useState<ShopConfig>({
     isOpen: true,
     autoSchedule: false,
@@ -24,31 +29,25 @@ export default function App() {
     closeTime: "20:00"
   });
 
-  // ✅ ระบบดักจับการเข้าชมจริง (Live Traffic via Supabase Presence & Tables)
   const [totalViews, setTotalViews] = useState<number>(0);
   const [currentOnline, setCurrentOnline] = useState<number>(1);
 
-  // Admin Credentials and login states
   const [adminUsername, setAdminUsername] = useState<string>('narongrit');
   const [adminPassword, setAdminPassword] = useState<string>('081144');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
 
-  // Auto-logout when switching back to customer view
   useEffect(() => {
     if (view === 'customer') {
       setIsAdminLoggedIn(false);
     }
   }, [view]);
 
-  // บันทึกตะกร้าสินค้าชั่วคราวในเครื่องลูกค้า
   useEffect(() => {
     localStorage.setItem('croffle_cart_v8', JSON.stringify(cart));
   }, [cart]);
 
-  // 🚀 1. ดึงข้อมูลทั้งหมดจาก Supabase เมื่อเปิดเว็บ (พร้อมระบบเพิ่มผู้ชมสะสมจริง)
   useEffect(() => {
     const fetchDatabase = async () => {
-      // 1.1 ดึงเมนูอาหาร
       const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
       if (prodData && prodData.length > 0) {
         setProducts(prodData);
@@ -57,24 +56,22 @@ export default function App() {
         setProducts(INITIAL_PRODUCTS);
       }
 
-      // 1.2 ดึงรายการออเดอร์ทั้งหมด
       const { data: orderData } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
       if (orderData) {
         setOrders(orderData);
       }
 
-      // 1.3 ดึงสถานะเปิด-ปิดร้าน
       const { data: configData } = await supabase.from('shop_config').select('*').eq('id', 1).single();
       if (configData) {
         setShopConfig({
           isOpen: configData.isOpen,
           autoSchedule: configData.autoSchedule,
           openTime: configData.openTime || "08:00",
-          closeTime: configData.closeTime || "20:00"
+          closeTime: configData.closeTime || "20:00",
+          qrCodeUrl: configData.qrCodeUrl // ✅ แก้บั๊กที่ 1: ดึงรูป QR จากฐานข้อมูลตอนเปิดเว็บ
         });
       }
 
-      // 1.4 อัปเดตและดึงยอดผู้เข้าชมสะสมของจริงจากตาราง page_views
       try {
         const { data: viewsData } = await supabase.from('page_views').select('count').eq('id', 1).single();
         if (viewsData) {
@@ -82,7 +79,6 @@ export default function App() {
           setTotalViews(updatedCount);
           await supabase.from('page_views').update({ count: updatedCount }).eq('id', 1);
         } else {
-          // หากรันครั้งแรกและตารางยังว่างอยู่ให้เพิ่มแถวแรกเข้าฐานข้อมูล
           await supabase.from('page_views').insert([{ id: 1, count: 1 }]);
           setTotalViews(1);
         }
@@ -93,21 +89,20 @@ export default function App() {
 
     fetchDatabase();
 
-    // 📡 2. เปิดระบบ Real-time ดักจับออเดอร์ใหม่จากลูกค้า
     const orderSubscription = supabase
       .channel('public:orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
         const { data } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
         if (data) {
           setOrders(data);
-          if (payload.eventType === 'INSERT') {
+          // ✅ แก้บั๊กที่ 3: แจ้งเตือนออเดอร์เข้า "เฉพาะ" ตอนที่เปิดหน้าแอดมินอยู่เท่านั้น
+          if (payload.eventType === 'INSERT' && viewRef.current === 'admin') {
             alert("🔔 แจ้งเตือน: มีออเดอร์ใหม่เข้าครับ! กรุณาเช็คคิวในหน้าแอดมิน");
           }
         }
       })
       .subscribe();
 
-    // 👥 3. ระบบติดตามจำนวนคนดูออนไลน์แบบเรียลไทม์ (Supabase Presence)
     const userStatusChannel = supabase.channel('online-users', {
       config: { presence: { key: 'user' } }
     });
@@ -130,7 +125,6 @@ export default function App() {
     };
   }, []);
 
-  // Time-based check tick สำหรับเวลาเปิด-ปิดอัตโนมัติ
   const [currentTimeTick, setCurrentTimeTick] = useState<string>("");
   useEffect(() => {
     const updateTick = () => {
@@ -150,7 +144,6 @@ export default function App() {
     return currentTimeTick >= shopConfig.openTime && currentTimeTick <= shopConfig.closeTime;
   }, [shopConfig, currentTimeTick]);
 
-  // 📝 ฟังก์ชันลูกค้ากดสั่งซื้อ -> ส่งข้อมูลขึ้นเซิร์ฟเวอร์ Supabase จริง
   const handlePlaceOrder = async (customerName: string, phone: string, roomNo: string, note: string) => {
     const maxId = orders.reduce((max, o) => {
       const num = parseInt(o.id.replace('#', ''), 10);
@@ -206,29 +199,7 @@ export default function App() {
     alert("เปลี่ยนรหัสผ่านสำเร็จแล้วครับ!");
   };
 
-  // Wrapper สำหรับอัปเดต Products ลง Database
-  const handleSetProducts: React.Dispatch<React.SetStateAction<Product[]>> = (val) => {
-    setProducts(prev => {
-      const next = typeof val === 'function' ? val(prev) : val;
-      next.forEach(async (p) => {
-        await supabase.from('products').upsert(p);
-      });
-      return next;
-    });
-  };
-
-  // Wrapper สำหรับอัปเดต Orders ลง Database
-  const handleSetOrders: React.Dispatch<React.SetStateAction<Order[]>> = (val) => {
-    setOrders(prev => {
-      const next = typeof val === 'function' ? val(prev) : val;
-      next.forEach(async (o) => {
-        await supabase.from('orders').upsert(o);
-      });
-      return next;
-    });
-  };
-
-  // Wrapper สำหรับอัปเดต ShopConfig ลง Database
+  // ✅ แก้บั๊กที่ 4: ลบ wrapper ยัดข้อมูลลง Database ซ้ำซ้อนทิ้ง เพื่อให้กดล้างคิวและลบเมนูได้จริง
   const handleSetShopConfig: React.Dispatch<React.SetStateAction<ShopConfig>> = (val) => {
     setShopConfig(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
@@ -236,7 +207,8 @@ export default function App() {
         isOpen: next.isOpen,
         autoSchedule: next.autoSchedule,
         openTime: next.openTime,
-        closeTime: next.closeTime
+        closeTime: next.closeTime,
+        qrCodeUrl: next.qrCodeUrl // ✅ แก้บั๊กที่ 1: บันทึกรูป QR Code ข้ามแพลตฟอร์มลง Database
       }).eq('id', 1).then();
       return next;
     });
@@ -265,9 +237,9 @@ export default function App() {
       ) : (
         <AdminView 
           products={products}
-          setProducts={handleSetProducts}
+          setProducts={setProducts} // ส่งตัวจัดการ state ของแท้ลงไปโดยตรง
           orders={orders}
-          setOrders={handleSetOrders}
+          setOrders={setOrders}     // ส่งตัวจัดการ state ของแท้ลงไปโดยตรง
           inventory={[]} 
           setInventory={() => {}} 
           onSwitchToCustomer={() => setView('customer')}
