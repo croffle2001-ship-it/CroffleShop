@@ -101,8 +101,9 @@ export default function App() {
       })
       .subscribe();
 
+    const sessionId = Math.random().toString(36).substring(2, 15);
     const userStatusChannel = supabase.channel('online-users', {
-      config: { presence: { key: 'user' } }
+      config: { presence: { key: sessionId } }
     });
 
     userStatusChannel
