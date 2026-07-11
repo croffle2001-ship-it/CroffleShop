@@ -58,7 +58,6 @@ export default function AdminView({
       }
     };
     fetchRealData();
-    // เอา Realtime Subscription ออกจากหน้านี้ เพราะ App.tsx ดึงข้อมูลทั้งหมดให้แบบเรียลไทม์อยู่แล้ว ป้องกันระบบชนกัน
   }, [setProducts, setOrders]); 
 
   const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'orders' | 'menu_stock' | 'settings'>('dashboard');
@@ -87,7 +86,7 @@ export default function AdminView({
   const handleUploadAdminProfile = async (file: File) => {
     try {
       setIsUploadingProfile(true);
-      const fileExt = file?.name?.split('.').pop() || 'jpg'; // ✅ แก้บั๊ก 2: กันแอพค้างตอนอัพภาพผ่านมือถือ
+      const fileExt = file?.name?.split('.').pop() || 'jpg';
       const fileName = `admin-profile-${Date.now()}.${fileExt}`;
       const filePath = `profiles/${fileName}`;
 
@@ -118,7 +117,7 @@ export default function AdminView({
       return;
     }
     try {
-      const fileExt = file?.name?.split('.').pop() || 'jpg'; // ✅ แก้บั๊ก 2: รองรับมือถือ
+      const fileExt = file?.name?.split('.').pop() || 'jpg';
       const safeOrderId = orderId.replace(/[^a-zA-Z0-9]/g, ''); 
       const timestamp = Date.now();
       const fileName = `delivery-${safeOrderId}-${timestamp}.${fileExt}`;
@@ -144,7 +143,7 @@ export default function AdminView({
   const handleUploadProductImage = async (file: File) => {
     try {
       setIsUploadingImg(true);
-      const fileExt = file?.name?.split('.').pop() || 'jpg'; // ✅ แก้บั๊ก 2: รองรับมือถือ
+      const fileExt = file?.name?.split('.').pop() || 'jpg';
       const fileName = `product-${Date.now()}.${fileExt}`;
       const filePath = `products/${fileName}`;
 
@@ -442,7 +441,24 @@ export default function AdminView({
                       </div>
 
                       <div id={`order-addr-${order.id}`} className="text-xs bg-[#fff1eb]/50 p-3 rounded-xl border border-[#ddc1b3]/20 flex flex-col gap-1">
-                        <p><strong>เบอร์ติดต่อ:</strong> <a href={`tel:${order.phone}`} className="text-[#9b4500] underline font-bold">{order.phone}</a></p><p><strong>ที่จัดส่ง:</strong> <span className="font-semibold text-[#231914]">{order.roomNo}</span></p>{order.note && (<p className="text-[11px] text-red-600 bg-red-50 p-1.5 rounded border border-red-100"><strong>โน้ตพิเศษ:</strong> "{order.note}"</p>)}
+                        <p><strong>เบอร์ติดต่อ:</strong> <a href={`tel:${order.phone}`} className="text-[#9b4500] underline font-bold">{order.phone}</a></p>
+                        <p><strong>ที่จัดส่ง:</strong> <span className="font-semibold text-[#231914]">{order.roomNo}</span></p>
+                        {order.note && (<p className="text-[11px] text-red-600 bg-red-50 p-1.5 rounded border border-red-100"><strong>โน้ตพิเศษ:</strong> "{order.note}"</p>)}
+                        
+                        {/* 👈 เพิ่มส่วนแสดงรูปภาพสลิปที่ลูกค้าแนบมา */}
+                        {order.paymentSlipUrl && (
+                          <div className="mt-2 pt-2 border-t border-[#ddc1b3]/30">
+                            <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mb-1.5">
+                              <Check size={12} className="stroke-[3]" /> ชำระเงินแบบโอนแล้ว (มีสลิป):
+                            </p>
+                            <img 
+                              src={order.paymentSlipUrl} 
+                              alt="สลิปโอนเงิน" 
+                              className="w-24 h-auto rounded-lg border border-[#ddc1b3]/50 cursor-pointer hover:opacity-80 transition-opacity shadow-sm"
+                              onClick={() => setSelectedFullPhoto(order.paymentSlipUrl || null)}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div id={`order-proof-sec-${order.id}`} className="mt-1 pb-1 flex flex-col gap-2 border-t border-[#fff1eb]/60 pt-2.5">
@@ -579,7 +595,7 @@ export default function AdminView({
                       const file = e.target.files?.[0];
                       if (file) {
                         try {
-                          const fileExt = file?.name?.split('.').pop() || 'jpg'; // ✅ แก้บั๊ก 2: รองรับมือถือ
+                          const fileExt = file?.name?.split('.').pop() || 'jpg'; 
                           const fileName = `qr-payment-${Date.now()}.${fileExt}`;
                           const filePath = `settings/${fileName}`;
 
@@ -587,7 +603,6 @@ export default function AdminView({
                           if (uploadError) throw uploadError;
 
                           const { data } = supabase.storage.from('croffle-bucket').getPublicUrl(filePath);
-                          // ✅ แก้บั๊ก 1: ใช้ setShopConfig ลง DB จริงผ่าน App.tsx ที่เพิ่งแก้
                           setShopConfig(prev => ({ ...prev, qrCodeUrl: `${data.publicUrl}?t=${Date.now()}` }));
                           alert('✅ อัปโหลด QR Code สำเร็จแล้วค่ะ!');
                         } catch (error) {
@@ -615,7 +630,6 @@ export default function AdminView({
                           
                           if (err1 || err2) throw new Error("Database deletion failed");
                           
-                          // ✅ บั๊ก 4 แก้ไขแล้ว เพราะเราใช้ setOrders ตัวแท้จาก App.tsx แทนการใช้ฟังก์ชันครอบ
                           setOrders(prev => prev.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled'));
                           alert("✅ ล้างคิวที่เสร็จสมบูรณ์เรียบร้อยแล้วค่ะ!");
                         } catch (error) {
@@ -648,8 +662,8 @@ export default function AdminView({
         {selectedFullPhoto && (
           <motion.div id="full-photo-modal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setSelectedFullPhoto(null)}>
             <motion.div id="full-photo-modal-card" initial={{ scale: 0.9, y: 15 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 15 }} className="bg-[#fcf5f2] rounded-3xl p-4.5 border border-[#ddc1b3]/30 max-w-md w-full relative flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center pb-2 border-b border-[#fff1eb]"><h3 className="text-sm font-bold text-[#9b4500]">📸 รูปถ่ายหลักฐานจัดส่ง</h3><button id="btn-close-full-photo" onClick={() => setSelectedFullPhoto(null)} className="bg-stone-200 hover:bg-stone-300 text-stone-700 p-1 rounded-full transition"><X size={16} /></button></div>
-              <div className="rounded-2xl overflow-hidden border border-[#ddc1b3]/30 bg-stone-50 max-h-[70vh] flex items-center justify-center shadow-inner"><img id="full-photo-modal-img" src={selectedFullPhoto} alt="ภาพหลักฐานจัดส่งความละเอียดเต็ม" className="w-full h-auto max-h-[70vh] object-contain"/></div>
+              <div className="flex justify-between items-center pb-2 border-b border-[#fff1eb]"><h3 className="text-sm font-bold text-[#9b4500]">📸 รูปเต็ม</h3><button id="btn-close-full-photo" onClick={() => setSelectedFullPhoto(null)} className="bg-stone-200 hover:bg-stone-300 text-stone-700 p-1 rounded-full transition"><X size={16} /></button></div>
+              <div className="rounded-2xl overflow-hidden border border-[#ddc1b3]/30 bg-stone-50 max-h-[70vh] flex items-center justify-center shadow-inner"><img id="full-photo-modal-img" src={selectedFullPhoto} alt="ภาพความละเอียดเต็ม" className="w-full h-auto max-h-[70vh] object-contain"/></div>
               <button id="btn-close-full-photo-bottom" onClick={() => setSelectedFullPhoto(null)} className="w-full py-2.5 rounded-full bg-[#9b4500] hover:bg-[#ff8c42] active:scale-98 text-white text-xs font-bold transition shadow-sm">ปิดหน้าต่างนี้</button>
             </motion.div>
           </motion.div>
