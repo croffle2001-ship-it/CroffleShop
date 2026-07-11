@@ -5,13 +5,14 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, CartItem, Order, Category, OrderStatus, ShopConfig } from '../types';
+import { supabase } from '../supabaseClient'; // 👈 เพิ่มการเรียกใช้ Supabase
 
 interface CustomerViewProps {
   products: Product[];
   orders: Order[];
   cart: CartItem[];
   setCart: React.Dispatch<React.SetStateAction<CartItem[]>>;
-  onPlaceOrder: (customerName: string, phone: string, roomNo: string, note: string) => Promise<string | null> | any;
+  onPlaceOrder: (customerName: string, phone: string, roomNo: string, note: string, paymentSlipUrl?: string) => Promise<string | null> | any;
   onSwitchToAdmin: () => void;
   isShopOpen: boolean;
   shopConfig: ShopConfig;
@@ -47,7 +48,10 @@ export default function CustomerView({
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
   
-  // ✅ แก้บั๊กออเดอร์หาย: ดึงเบอร์โทรจาก Cache ภายในเครื่อง ป้องกันเว็บโดนตัดตอนสลับไปแอปธนาคาร
+  // 👈 เพิ่ม State สำหรับจัดการรูปสลิป
+  const [paymentSlipFile, setPaymentSlipFile] = useState<File | null>(null);
+  const [paymentSlipPreview, setPaymentSlipPreview] = useState<string | null>(null);
+
   const [sessionPhone, setSessionPhone] = useState<string>(() => {
     return localStorage.getItem('croffle_session_phone') || '';
   });
@@ -131,7 +135,7 @@ export default function CustomerView({
   };
 
   const drawerItemTotal = useMemo(() => {
-    if (!selectedProduct) return 0;
+    if (!selectedProduct) return;
     const toppingsPrice = selectedToppings.length > 1 ? (selectedToppings.length - 1) * 5 : 0;
     return (selectedProduct.price + toppingsPrice) * itemQuantity;
   }, [selectedProduct, selectedToppings, itemQuantity]);
@@ -175,28 +179,47 @@ export default function CustomerView({
     });
   };
 
-  // ✅ แก้ไข: รับเลขคิวจริงมาจาก App.tsx เพื่อแสดงให้ตรงกัน + ฝังเบอร์ลูกค้าลงในเครื่อง
+  // 👈 อัปเดตฟังก์ชันจัดการการ Checkout และการอัปโหลดสลิป
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !roomNo.trim()) { alert("กรุณากรอกข้อมูลผู้รับและที่อยู่จัดส่งให้ครบถ้วนค่ะ"); return; }
     if (!deliveryArea) { alert("กรุณาเลือกพื้นที่จัดส่ง (ส่งเฉพาะ บ้านเอื้ออาทร กม.44 หรือ โครงการ MMC เท่านั้น)"); return; }
     if (deliveryArea === 'โครงการ MMC' && !companyName.trim()) { alert("กรุณาระบุชื่อบริษัทสำหรับโครงการ MMC ค่ะ"); return; }
+    
+    if (paymentMethod === 'qr' && !paymentSlipFile) { 
+      alert("กรุณาแนบสลิปการโอนเงินเพื่อยืนยันออเดอร์ด้วยค่ะ"); 
+      return; 
+    }
 
     setIsSubmittingOrder(true);
     const fullAddress = deliveryArea === 'โครงการ MMC' ? `${deliveryArea} - บริษัท ${companyName.trim()} - ${roomNo}` : `${deliveryArea} - ${roomNo}`;
-    const paymentLabel = paymentMethod === 'qr' ? '📱 โอนเงิน(รอตรวจสลิป)' : '💵 เงินสดปลายทาง';
+    const paymentLabel = paymentMethod === 'qr' ? '📱 โอนเงิน' : '💵 เงินสดปลายทาง';
     const finalNote = `[ชำระด้วย: ${paymentLabel}] ${orderNote}`.trim();
 
     try {
-      const actualOrderId = await onPlaceOrder(customerName, phone, fullAddress, finalNote);
+      let uploadedSlipUrl = undefined;
+      
+      if (paymentMethod === 'qr' && paymentSlipFile) {
+        const fileExt = paymentSlipFile.name.split('.').pop() || 'jpg';
+        const fileName = `slip-${Date.now()}.${fileExt}`;
+        const filePath = `slips/${fileName}`;
+        
+        const { error: uploadError } = await supabase.storage.from('croffle-bucket').upload(filePath, paymentSlipFile, { upsert: true });
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from('croffle-bucket').getPublicUrl(filePath);
+        uploadedSlipUrl = `${data.publicUrl}?t=${Date.now()}`;
+      }
+
+      const actualOrderId = await onPlaceOrder(customerName, phone, fullAddress, finalNote, uploadedSlipUrl);
       
       setSessionPhone(phone);
-      localStorage.setItem('croffle_session_phone', phone); // บันทึกลงเครื่อง ป้องกันรีเฟรชหาย
+      localStorage.setItem('croffle_session_phone', phone); 
 
       setIsSubmittingOrder(false);
       
       if (actualOrderId) {
-        setOrderSuccess(actualOrderId); // แสดงผลเลขคิวจริงที่ตรงกับของแอดมิน!
+        setOrderSuccess(actualOrderId); 
       } else {
         setOrderSuccess("กำลังดำเนินการส่ง...");
       }
@@ -204,9 +227,12 @@ export default function CustomerView({
       setActiveTab('orders');
       setOrderNote('');
       setCompanyName('');
+      setPaymentSlipFile(null);
+      setPaymentSlipPreview(null);
     } catch (err) {
+      console.error(err);
       setIsSubmittingOrder(false);
-      alert("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้งค่ะ");
+      alert("เกิดข้อผิดพลาดในการสั่งซื้อ กรุณาลองใหม่อีกครั้งค่ะ");
     }
   };
 
@@ -452,14 +478,40 @@ export default function CustomerView({
                           ) : (
                             <div className="w-40 h-40 bg-stone-100 rounded-lg flex flex-col items-center justify-center text-stone-400 gap-2 border border-dashed border-stone-300"><Camera size={24} /><span className="text-[10px]">รอแอดมินอัปเดต QR</span></div>
                           )}
-                          <p className="text-[10px] text-stone-500 mt-1 leading-relaxed">สแกนชำระเงินและ<strong className="text-[#9b4500]">เตรียมสลิป</strong>โชว์ให้ไรเดอร์ตอนรับอาหารนะคะ</p>
+                          
+                          {/* 👈 UI ใหม่สำหรับการอัปโหลดสลิป */}
+                          <div className="w-full mt-3">
+                            <label className={`w-full cursor-pointer bg-white border-2 border-dashed ${paymentSlipPreview ? 'border-emerald-400' : 'border-[#ddc1b3] hover:border-[#9b4500]'} rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all`}>
+                              {paymentSlipPreview ? (
+                                <div className="relative w-full flex flex-col items-center gap-2">
+                                  <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check size={14} /> แนบสลิปเรียบร้อย</span>
+                                  <img src={paymentSlipPreview} alt="Slip Preview" className="max-h-32 object-contain rounded-lg shadow-sm border border-emerald-100" />
+                                  <span className="text-[10px] text-red-500 font-bold mt-1 bg-red-50 px-2 py-1 rounded-md" onClick={(e) => { e.preventDefault(); setPaymentSlipFile(null); setPaymentSlipPreview(null); }}>ลบรูป/เปลี่ยนสลิป</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <Camera size={20} className="text-[#9b4500]" />
+                                  <span className="text-xs font-bold text-[#564338]">แตะเพื่อแนบสลิปโอนเงิน <span className="text-red-500">*</span></span>
+                                  <span className="text-[9px] text-[#897266]">ต้องแนบสลิปก่อนจึงจะกดสั่งอาหารได้</span>
+                                </>
+                              )}
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setPaymentSlipFile(file);
+                                  setPaymentSlipPreview(URL.createObjectURL(file));
+                                }
+                              }} />
+                            </label>
+                          </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
 
-                  <button type="submit" disabled={isSubmittingOrder || !isShopOpen} className="w-full mt-2 bg-[#9b4500] hover:bg-[#ff8c42] disabled:bg-stone-300 disabled:cursor-not-allowed text-white py-3.5 rounded-full font-bold text-sm shadow-md transition-all duration-150 flex items-center justify-center gap-2 active:scale-98">
-                    {isSubmittingOrder ? (<><RefreshCw size={16} className="animate-spin" /><span>กำลังส่งคำสั่งซื้อเข้าร้าน...</span></>) : !isShopOpen ? (<><ShieldAlert size={16} /><span>ขณะนี้ร้านปิดให้บริการชั่วคราว</span></>) : (<><Send size={16} /><span>ยืนยันออเดอร์และเตาอบ (฿{cartTotalPrice})</span></>)}
+                  {/* 👈 อัปเดตเงื่อนไขปุ่ม ยืนยันออเดอร์ */}
+                  <button type="submit" disabled={isSubmittingOrder || !isShopOpen || (paymentMethod === 'qr' && !paymentSlipFile)} className="w-full mt-2 bg-[#9b4500] hover:bg-[#ff8c42] disabled:bg-stone-300 disabled:cursor-not-allowed text-white py-3.5 rounded-full font-bold text-sm shadow-md transition-all duration-150 flex items-center justify-center gap-2 active:scale-98">
+                    {isSubmittingOrder ? (<><RefreshCw size={16} className="animate-spin" /><span>กำลังส่งคำสั่งซื้อและหลักฐาน...</span></>) : !isShopOpen ? (<><ShieldAlert size={16} /><span>ขณะนี้ร้านปิดให้บริการชั่วคราว</span></>) : (<><Send size={16} /><span>ยืนยันออเดอร์และเตาอบ (฿{cartTotalPrice})</span></>)}
                   </button>
                 </form>
               </div>
