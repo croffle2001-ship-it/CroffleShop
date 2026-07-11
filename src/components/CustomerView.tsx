@@ -11,7 +11,7 @@ interface CustomerViewProps {
   orders: Order[];
   cart: CartItem[];
   setCart: React.Dispatch<React.SetStateAction<CartItem[]>>;
-  onPlaceOrder: (customerName: string, phone: string, roomNo: string, note: string) => void;
+  onPlaceOrder: (customerName: string, phone: string, roomNo: string, note: string) => Promise<string | null> | any;
   onSwitchToAdmin: () => void;
   isShopOpen: boolean;
   shopConfig: ShopConfig;
@@ -46,7 +46,11 @@ export default function CustomerView({
   
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
-  const [sessionPhone, setSessionPhone] = useState<string>('');
+  
+  // ✅ แก้บั๊กออเดอร์หาย: ดึงเบอร์โทรจาก Cache ภายในเครื่อง ป้องกันเว็บโดนตัดตอนสลับไปแอปธนาคาร
+  const [sessionPhone, setSessionPhone] = useState<string>(() => {
+    return localStorage.getItem('croffle_session_phone') || '';
+  });
 
   const categories: (Category | 'all' | 'เมนูขายดี')[] = ['all', 'เมนูขายดี', 'ขนม', 'เครื่องดื่ม'];
 
@@ -85,7 +89,6 @@ export default function CustomerView({
     return orders.filter(o => o.phone === sessionPhone);
   }, [orders, sessionPhone]);
 
-  // ✅ แก้บั๊ก 3: แจ้งเตือนออเดอร์ส่งเรียบร้อยแล้ว เฉพาะออเดอร์ของลูกค้ารายนี้เท่านั้น
   const prevOrdersRef = useRef<Order[]>(orders);
   useEffect(() => {
     if (sessionPhone) {
@@ -172,7 +175,8 @@ export default function CustomerView({
     });
   };
 
-  const handleCheckout = (e: React.FormEvent) => {
+  // ✅ แก้ไข: รับเลขคิวจริงมาจาก App.tsx เพื่อแสดงให้ตรงกัน + ฝังเบอร์ลูกค้าลงในเครื่อง
+  const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !roomNo.trim()) { alert("กรุณากรอกข้อมูลผู้รับและที่อยู่จัดส่งให้ครบถ้วนค่ะ"); return; }
     if (!deliveryArea) { alert("กรุณาเลือกพื้นที่จัดส่ง (ส่งเฉพาะ บ้านเอื้ออาทร กม.44 หรือ โครงการ MMC เท่านั้น)"); return; }
@@ -183,17 +187,27 @@ export default function CustomerView({
     const paymentLabel = paymentMethod === 'qr' ? '📱 โอนเงิน(รอตรวจสลิป)' : '💵 เงินสดปลายทาง';
     const finalNote = `[ชำระด้วย: ${paymentLabel}] ${orderNote}`.trim();
 
-    setTimeout(() => {
+    try {
+      const actualOrderId = await onPlaceOrder(customerName, phone, fullAddress, finalNote);
+      
       setSessionPhone(phone);
-      onPlaceOrder(customerName, phone, fullAddress, finalNote);
+      localStorage.setItem('croffle_session_phone', phone); // บันทึกลงเครื่อง ป้องกันรีเฟรชหาย
+
       setIsSubmittingOrder(false);
-      setCart([]); 
-      const newOrderId = `#${Math.floor(4400 + Math.random() * 500)}`;
-      setOrderSuccess(newOrderId);
+      
+      if (actualOrderId) {
+        setOrderSuccess(actualOrderId); // แสดงผลเลขคิวจริงที่ตรงกับของแอดมิน!
+      } else {
+        setOrderSuccess("กำลังดำเนินการส่ง...");
+      }
+      
       setActiveTab('orders');
       setOrderNote('');
       setCompanyName('');
-    }, 1200);
+    } catch (err) {
+      setIsSubmittingOrder(false);
+      alert("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้งค่ะ");
+    }
   };
 
   return (

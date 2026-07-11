@@ -9,7 +9,6 @@ import { supabase } from './supabaseClient';
 export default function App() {
   const [view, setView] = useState<'customer' | 'admin'>('customer');
   
-  // ใช้ useRef เพื่อดักจับว่าตอนนี้ผู้ใช้อยู่หน้าไหน (ใช้สำหรับแยกแจ้งเตือน)
   const viewRef = useRef(view);
   useEffect(() => {
     viewRef.current = view;
@@ -68,7 +67,7 @@ export default function App() {
           autoSchedule: configData.autoSchedule,
           openTime: configData.openTime || "08:00",
           closeTime: configData.closeTime || "20:00",
-          qrCodeUrl: configData.qrCodeUrl // ✅ แก้บั๊กที่ 1: ดึงรูป QR จากฐานข้อมูลตอนเปิดเว็บ
+          qrCodeUrl: configData.qrCodeUrl
         });
       }
 
@@ -95,7 +94,6 @@ export default function App() {
         const { data } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
         if (data) {
           setOrders(data);
-          // ✅ แก้บั๊กที่ 3: แจ้งเตือนออเดอร์เข้า "เฉพาะ" ตอนที่เปิดหน้าแอดมินอยู่เท่านั้น
           if (payload.eventType === 'INSERT' && viewRef.current === 'admin') {
             alert("🔔 แจ้งเตือน: มีออเดอร์ใหม่เข้าครับ! กรุณาเช็คคิวในหน้าแอดมิน");
           }
@@ -144,6 +142,7 @@ export default function App() {
     return currentTimeTick >= shopConfig.openTime && currentTimeTick <= shopConfig.closeTime;
   }, [shopConfig, currentTimeTick]);
 
+  // ✅ แก้ไข: ให้ฟังก์ชันส่งคืนเลขคิวจริง (newOrderId) กลับไปให้หน้าลูกค้าแสดงผล
   const handlePlaceOrder = async (customerName: string, phone: string, roomNo: string, note: string) => {
     const maxId = orders.reduce((max, o) => {
       const num = parseInt(o.id.replace('#', ''), 10);
@@ -189,8 +188,10 @@ export default function App() {
     if (error) {
       alert("⚠️ เกิดข้อผิดพลาดในการส่งออเดอร์ กรุณาลองใหม่อีกครั้งครับ");
       console.error(error);
+      return null; 
     } else {
       setCart([]);
+      return newOrderId; // โยนเลขคิวกลับไปหาหน้าลูกค้า!
     }
   };
 
@@ -199,7 +200,6 @@ export default function App() {
     alert("เปลี่ยนรหัสผ่านสำเร็จแล้วครับ!");
   };
 
-  // ✅ แก้บั๊กที่ 4: ลบ wrapper ยัดข้อมูลลง Database ซ้ำซ้อนทิ้ง เพื่อให้กดล้างคิวและลบเมนูได้จริง
   const handleSetShopConfig: React.Dispatch<React.SetStateAction<ShopConfig>> = (val) => {
     setShopConfig(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
@@ -208,7 +208,7 @@ export default function App() {
         autoSchedule: next.autoSchedule,
         openTime: next.openTime,
         closeTime: next.closeTime,
-        qrCodeUrl: next.qrCodeUrl // ✅ แก้บั๊กที่ 1: บันทึกรูป QR Code ข้ามแพลตฟอร์มลง Database
+        qrCodeUrl: next.qrCodeUrl 
       }).eq('id', 1).then();
       return next;
     });
@@ -237,9 +237,9 @@ export default function App() {
       ) : (
         <AdminView 
           products={products}
-          setProducts={setProducts} // ส่งตัวจัดการ state ของแท้ลงไปโดยตรง
+          setProducts={setProducts} 
           orders={orders}
-          setOrders={setOrders}     // ส่งตัวจัดการ state ของแท้ลงไปโดยตรง
+          setOrders={setOrders}     
           inventory={[]} 
           setInventory={() => {}} 
           onSwitchToCustomer={() => setView('customer')}
