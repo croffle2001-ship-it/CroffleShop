@@ -185,10 +185,9 @@ export default function CustomerView({
     if (!deliveryArea) { alert("กรุณาเลือกพื้นที่จัดส่ง (ส่งเฉพาะ บ้านเอื้ออาทร กม.44 หรือ โครงการ MMC เท่านั้น)"); return; }
     if (deliveryArea === 'โครงการ MMC' && !companyName.trim()) { alert("กรุณาระบุชื่อบริษัทสำหรับโครงการ MMC ค่ะ"); return; }
     
-    // 🚨 บังคับตรวจสอบสลิปตรงนี้แบบเด็ดขาด!
     if (paymentMethod === 'qr' && !paymentSlipFile) { 
       alert("⚠️ ไม่พบสลิปการโอนเงิน!\nกรุณาแนบรูปสลิปการโอนเงินเพื่อยืนยันออเดอร์ด้วยค่ะ"); 
-      return; // หยุดการส่งออเดอร์ทันที
+      return; 
     }
 
     setIsSubmittingOrder(true);
@@ -211,19 +210,21 @@ export default function CustomerView({
         uploadedSlipUrl = `${data.publicUrl}?t=${Date.now()}`;
       }
 
+      // ส่งข้อมูลไปบันทึกที่ App.tsx
       const actualOrderId = await onPlaceOrder(customerName, phone, fullAddress, finalNote, uploadedSlipUrl);
       
+      setIsSubmittingOrder(false);
+
+      // 🚨 เพิ่มการดักจับตรงนี้: ถ้าออเดอร์ไม่สำเร็จ (actualOrderId เป็น null) ให้หยุดการทำงานทันที
+      if (!actualOrderId) {
+        return; 
+      }
+      
+      // ถ้าสำเร็จ ถึงจะเคลียร์ฟอร์มและไปหน้าสถานะออเดอร์
       setSessionPhone(phone);
       localStorage.setItem('croffle_session_phone', phone); 
 
-      setIsSubmittingOrder(false);
-      
-      if (actualOrderId) {
-        setOrderSuccess(actualOrderId); 
-      } else {
-        setOrderSuccess("กำลังดำเนินการส่ง...");
-      }
-      
+      setOrderSuccess(actualOrderId); 
       setActiveTab('orders');
       setOrderNote('');
       setCompanyName('');
