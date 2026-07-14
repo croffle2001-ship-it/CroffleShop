@@ -78,36 +78,6 @@ export default function AdminView({
   const [passwordStatus, setPasswordStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [selectedFullPhoto, setSelectedFullPhoto] = useState<string | null>(null);
-  const [isUploadingProfile, setIsUploadingProfile] = useState(false);
-  
-  // ใช้ค่ารูปโปรไฟล์จาก shopConfig แทน LocalStorage เพื่อให้ซิงค์กัน
-  const adminProfilePic = shopConfig.adminProfilePic || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150";
-
-  const handleUploadAdminProfile = async (file: File) => {
-    try {
-      setIsUploadingProfile(true);
-      const fileExt = file?.name?.split('.').pop() || 'jpg';
-      const fileName = `admin-profile-${Date.now()}.${fileExt}`;
-      const filePath = `profiles/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('croffle-bucket')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from('croffle-bucket').getPublicUrl(filePath);
-      const newUrl = `${data.publicUrl}?t=${Date.now()}`;
-      
-      // บันทึกผ่าน setShopConfig ไปยัง Supabase ทันที
-      setShopConfig(prev => ({ ...prev, adminProfilePic: newUrl }));
-      setIsUploadingProfile(false);
-    } catch (error) {
-      console.error(error);
-      setIsUploadingProfile(false);
-      alert('⚠️ ไม่สามารถอัปโหลดรูปโปรไฟล์ได้ กรุณาลองใหม่อีกครั้งค่ะ');
-    }
-  };
 
   const handleUpdateOrderPhoto = async (orderId: string, file: File | undefined) => {
     if (!file) {
@@ -301,11 +271,9 @@ export default function AdminView({
       <header className="shrink-0 z-40 bg-[#fff8f6]/95 backdrop-blur-md shadow-sm border-b border-[#f2dfd5] md:pt-9 pt-3">
         <div className="flex justify-between items-center px-4 py-3.5 w-full">
           <div className="flex items-center gap-2.5">
-            <label className="w-10 h-10 rounded-full border-2 border-[#9b4500] overflow-hidden flex-shrink-0 bg-[#f2dfd5] shadow-sm cursor-pointer relative group block">
-              <img className={`w-full h-full object-cover transition-all ${isUploadingProfile ? 'opacity-50' : 'group-hover:opacity-70'}`} src={adminProfilePic} alt="โปรไฟล์แอดมิน"/>
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40"><Camera size={14} className="text-white" /></div>
-              <input type="file" accept="image/*" className="hidden" disabled={isUploadingProfile} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadAdminProfile(file); }}/>
-            </label>
+            <div className="w-10 h-10 rounded-full border-2 border-[#9b4500] overflow-hidden flex-shrink-0 bg-[#f2dfd5] shadow-sm relative block">
+              <img className="w-full h-full object-cover" src="/Logo.jpg" alt="โปรไฟล์แอดมิน"/>
+            </div>
             <div className="flex flex-col">
               <h1 className="text-base font-bold text-[#9b4500] flex items-center gap-1">แอดมิน <span className="text-[10px] bg-[#9b4500]/10 text-[#9b4500] font-bold px-1.5 py-0.5 rounded-full uppercase">Live</span></h1>
               <p className="text-[10px] text-[#564338] font-semibold">ร้านครอฟเฟิลไอ้แว่น กม.44</p>
@@ -446,7 +414,6 @@ export default function AdminView({
                         <p><strong>ที่จัดส่ง:</strong> <span className="font-semibold text-[#231914]">{order.roomNo}</span></p>
                         {order.note && (<p className="text-[11px] text-red-600 bg-red-50 p-1.5 rounded border border-red-100"><strong>โน้ตพิเศษ:</strong> "{order.note}"</p>)}
                         
-                        {/* 👈 เพิ่มส่วนแสดงรูปภาพสลิปที่ลูกค้าแนบมา */}
                         {order.paymentSlipUrl && (
                           <div className="mt-2 pt-2 border-t border-[#ddc1b3]/30">
                             <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mb-1.5">
@@ -582,38 +549,12 @@ export default function AdminView({
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-[#ddc1b3]/30 shadow-sm">
-              <div className="border-b border-[#fff1eb] pb-3 text-center"><Camera className="text-[#9b4500] mx-auto mb-1" size={26} /><h2 className="text-sm font-bold text-[#231914]">ตั้งค่าช่องทางชำระเงิน (QR Code)</h2><p className="text-[10px] text-[#564338] mt-0.5">แนบรูป QR Code เพื่อให้ลูกค้าสแกนชำระเงินที่หน้าร้าน</p></div>
-              <div className="flex flex-col items-center gap-3">
-                {shopConfig.qrCodeUrl ? (
-                  <div className="relative group">
-                    <img src={shopConfig.qrCodeUrl} alt="QR Code ร้านค้า" className="w-32 h-32 object-contain rounded-xl border border-[#ddc1b3]/30 shadow-sm"/>
-                    <button onClick={() => setShopConfig(prev => ({ ...prev, qrCodeUrl: undefined }))} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-md hover:bg-red-600 transition-colors" title="ลบ QR Code"><X size={14} /></button>
-                  </div>
-                ) : (
-                  <label className="w-32 h-32 bg-[#fff8f6] border border-dashed border-[#ddc1b3]/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-[#feeae0]/40 transition-all">
-                    <Camera size={24} className="text-[#9b4500] mb-2" /><span className="text-[10px] text-[#564338] font-bold">อัปโหลดรูป QR</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        try {
-                          const fileExt = file?.name?.split('.').pop() || 'jpg'; 
-                          const fileName = `qr-payment-${Date.now()}.${fileExt}`;
-                          const filePath = `settings/${fileName}`;
-
-                          const { error: uploadError } = await supabase.storage.from('croffle-bucket').upload(filePath, file, { upsert: true });
-                          if (uploadError) throw uploadError;
-
-                          const { data } = supabase.storage.from('croffle-bucket').getPublicUrl(filePath);
-                          setShopConfig(prev => ({ ...prev, qrCodeUrl: `${data.publicUrl}?t=${Date.now()}` }));
-                          alert('✅ อัปโหลด QR Code สำเร็จแล้วค่ะ!');
-                        } catch (error) {
-                          console.error(error);
-                          alert('⚠️ เกิดข้อผิดพลาดในการอัปโหลด QR Code กรุณาลองใหม่อีกครั้ง');
-                        }
-                      }
-                    }}/>
-                  </label>
-                )}
+              <div className="border-b border-[#fff1eb] pb-3 text-center"><Camera className="text-[#9b4500] mx-auto mb-1" size={26} /><h2 className="text-sm font-bold text-[#231914]">ช่องทางชำระเงิน (QR Code)</h2><p className="text-[10px] text-[#564338] mt-0.5">ระบบดึงรูป QR Code และเลขบัญชีอัตโนมัติแล้ว</p></div>
+              <div className="flex flex-col items-center gap-3 mt-2">
+                <div className="relative group">
+                  <img src="/QR Code.jpg" alt="QR Code ร้านค้า" className="w-48 h-auto object-contain rounded-xl border border-[#ddc1b3]/30 shadow-sm"/>
+                </div>
+                <p className="text-[10px] text-stone-500 font-medium">QR Code รูปนี้ถูกตั้งค่าเป็นรูปภาพหลักของระบบแล้ว</p>
               </div>
             </motion.div>
 

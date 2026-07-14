@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, Star, AlertTriangle, Plus, Minus, ShoppingCart, 
-  Home, ClipboardList, Check, X, ShieldAlert, Heart, RefreshCw, Send, Camera 
+  Home, ClipboardList, Check, X, ShieldAlert, Heart, RefreshCw, Send, Camera, Copy 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, CartItem, Order, Category, OrderStatus, ShopConfig } from '../types';
@@ -48,9 +48,9 @@ export default function CustomerView({
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
   
-  // State สำหรับเก็บรูปภาพสลิป
   const [paymentSlipFile, setPaymentSlipFile] = useState<File | null>(null);
   const [paymentSlipPreview, setPaymentSlipPreview] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   const [sessionPhone, setSessionPhone] = useState<string>(() => {
     return localStorage.getItem('croffle_session_phone') || '';
@@ -134,6 +134,12 @@ export default function CustomerView({
     });
   };
 
+  const handleCopyBankNumber = () => {
+    navigator.clipboard.writeText('1923153671');
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
   const drawerItemTotal = useMemo(() => {
     if (!selectedProduct) return;
     const toppingsPrice = selectedToppings.length > 1 ? (selectedToppings.length - 1) * 5 : 0;
@@ -210,17 +216,14 @@ export default function CustomerView({
         uploadedSlipUrl = `${data.publicUrl}?t=${Date.now()}`;
       }
 
-      // ส่งข้อมูลไปบันทึกที่ App.tsx
       const actualOrderId = await onPlaceOrder(customerName, phone, fullAddress, finalNote, uploadedSlipUrl);
       
       setIsSubmittingOrder(false);
 
-      // 🚨 เพิ่มการดักจับตรงนี้: ถ้าออเดอร์ไม่สำเร็จ (actualOrderId เป็น null) ให้หยุดการทำงานทันที
       if (!actualOrderId) {
         return; 
       }
       
-      // ถ้าสำเร็จ ถึงจะเคลียร์ฟอร์มและไปหน้าสถานะออเดอร์
       setSessionPhone(phone);
       localStorage.setItem('croffle_session_phone', phone); 
 
@@ -472,15 +475,29 @@ export default function CustomerView({
 
                     <AnimatePresence>
                       {paymentMethod === 'qr' && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-2 bg-[#fffaf8] border border-[#ddc1b3]/50 rounded-xl p-4 flex flex-col items-center text-center gap-2 overflow-hidden">
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-2 bg-[#fffaf8] border border-[#ddc1b3]/50 rounded-xl p-4 flex flex-col items-center text-center gap-3 overflow-hidden">
                           <p className="text-[11px] font-bold text-[#9b4500]">ยอดที่ต้องโอนชำระ: ฿{cartTotalPrice}</p>
-                          {shopConfig.qrCodeUrl ? (
-                            <img src={shopConfig.qrCodeUrl} alt="QR Code ชำระเงิน" className="w-40 h-40 object-contain rounded-lg border border-[#ddc1b3]/30 shadow-sm" />
-                          ) : (
-                            <div className="w-40 h-40 bg-stone-100 rounded-lg flex flex-col items-center justify-center text-stone-400 gap-2 border border-dashed border-stone-300"><Camera size={24} /><span className="text-[10px]">รอแอดมินอัปเดต QR</span></div>
-                          )}
                           
-                          <div className="w-full mt-3">
+                          <img src="/QR Code.jpg" alt="QR Code ชำระเงิน" className="w-48 h-auto object-contain rounded-lg border border-[#ddc1b3]/30 shadow-sm" />
+                          
+                          <div className="w-full bg-white border border-[#ddc1b3]/50 rounded-xl p-3 flex flex-col gap-1.5 mt-1">
+                            <div className="flex justify-between items-center px-1">
+                              <span className="text-[10px] font-bold text-[#564338]">ธนาคารกสิกรไทย</span>
+                              <span className="text-[10px] font-bold text-[#564338]">ชื่อบัญชี: ณรงค์ฤทธิ์</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-stone-50 rounded-lg p-2 border border-stone-200">
+                              <span className="text-sm font-extrabold tracking-wider text-[#9b4500]">1923153671</span>
+                              <button
+                                type="button"
+                                onClick={handleCopyBankNumber}
+                                className={`text-[10px] font-bold px-3 py-1.5 rounded-md transition-all flex items-center gap-1 ${isCopied ? 'bg-emerald-100 text-emerald-700' : 'bg-[#feeae0] text-[#9b4500] hover:bg-[#ff8c42] hover:text-white'}`}
+                              >
+                                {isCopied ? <><Check size={12} className="stroke-[3]" /> คัดลอกแล้ว</> : <><Copy size={12} /> คัดลอกเลขบัญชี</>}
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <div className="w-full mt-2">
                             <label className={`w-full cursor-pointer bg-white border-2 border-dashed ${paymentSlipPreview ? 'border-emerald-400' : 'border-[#ddc1b3] hover:border-[#9b4500]'} rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all`}>
                               {paymentSlipPreview ? (
                                 <div className="relative w-full flex flex-col items-center gap-2">
@@ -509,7 +526,6 @@ export default function CustomerView({
                     </AnimatePresence>
                   </div>
 
-                  {/* 🚨 ปุ่มแก้ไขใหม่: ปลดล็อคให้กดได้เสมอ แต่ถ้ากดแล้วไม่แนบสลิป จะถูกแจ้งเตือนแทน */}
                   <button type="submit" disabled={isSubmittingOrder || !isShopOpen} className="w-full mt-2 bg-[#9b4500] hover:bg-[#ff8c42] disabled:bg-stone-300 disabled:cursor-not-allowed text-white py-3.5 rounded-full font-bold text-sm shadow-md transition-all duration-150 flex items-center justify-center gap-2 active:scale-98">
                     {isSubmittingOrder ? (<><RefreshCw size={16} className="animate-spin" /><span>กำลังส่งคำสั่งซื้อและหลักฐาน...</span></>) : !isShopOpen ? (<><ShieldAlert size={16} /><span>ขณะนี้ร้านปิดให้บริการชั่วคราว</span></>) : (<><Send size={16} /><span>ยืนยันออเดอร์และเตาอบ (฿{cartTotalPrice})</span></>)}
                   </button>
