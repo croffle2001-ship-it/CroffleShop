@@ -58,5 +58,9 @@ export interface ShopConfig {
   autoSchedule: boolean;
   openTime: string;
   closeTime: string;
+  qrCodeUrl?: string;
+  adminProfilePic?: string; // <-- ต้องมีตัวนี้ครับ
 }
+
+
 
