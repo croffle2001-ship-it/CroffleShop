@@ -79,9 +79,9 @@ export default function AdminView({
 
   const [selectedFullPhoto, setSelectedFullPhoto] = useState<string | null>(null);
   const [isUploadingProfile, setIsUploadingProfile] = useState(false);
-  const [adminProfilePic, setAdminProfilePic] = useState(() => {
-    return localStorage.getItem('adminProfilePic') || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150";
-  });
+  
+  // ใช้ค่ารูปโปรไฟล์จาก shopConfig แทน LocalStorage เพื่อให้ซิงค์กัน
+  const adminProfilePic = shopConfig.adminProfilePic || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150";
 
   const handleUploadAdminProfile = async (file: File) => {
     try {
@@ -98,8 +98,9 @@ export default function AdminView({
 
       const { data } = supabase.storage.from('croffle-bucket').getPublicUrl(filePath);
       const newUrl = `${data.publicUrl}?t=${Date.now()}`;
-      setAdminProfilePic(newUrl);
-      localStorage.setItem('adminProfilePic', newUrl);
+      
+      // บันทึกผ่าน setShopConfig ไปยัง Supabase ทันที
+      setShopConfig(prev => ({ ...prev, adminProfilePic: newUrl }));
       setIsUploadingProfile(false);
     } catch (error) {
       console.error(error);

@@ -69,7 +69,8 @@ export default function App() {
           autoSchedule: configData.autoSchedule,
           openTime: configData.openTime || "08:00",
           closeTime: configData.closeTime || "20:00",
-          qrCodeUrl: configData.qrCodeUrl
+          qrCodeUrl: configData.qrCodeUrl,
+          adminProfilePic: configData.adminProfilePic // เพิ่มดึงรูปโปรไฟล์
         });
       }
 
@@ -120,6 +121,23 @@ export default function App() {
       })
       .subscribe();
 
+    // ดักจับการเปลี่ยนแปลงการตั้งค่าร้าน (QR Code, โปรไฟล์, เปิด/ปิดร้าน)
+    const configSubscription = supabase
+      .channel('public:shop_config')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shop_config' }, (payload: any) => {
+        if (payload.new) {
+          setShopConfig({
+            isOpen: payload.new.isOpen,
+            autoSchedule: payload.new.autoSchedule,
+            openTime: payload.new.openTime || "08:00",
+            closeTime: payload.new.closeTime || "20:00",
+            qrCodeUrl: payload.new.qrCodeUrl,
+            adminProfilePic: payload.new.adminProfilePic
+          });
+        }
+      })
+      .subscribe();
+
     const sessionId = Math.random().toString(36).substring(2, 15);
     const userStatusChannel = supabase.channel('online-users', {
       config: { presence: { key: sessionId } }
@@ -148,6 +166,7 @@ export default function App() {
       supabase.removeChannel(viewsSubscription);
       supabase.removeChannel(orderSubscription);
       supabase.removeChannel(userStatusChannel);
+      supabase.removeChannel(configSubscription); // ล้าง channel เมื่อออก
     };
   }, []);
 
@@ -242,7 +261,8 @@ export default function App() {
         autoSchedule: next.autoSchedule,
         openTime: next.openTime,
         closeTime: next.closeTime,
-        qrCodeUrl: next.qrCodeUrl 
+        qrCodeUrl: next.qrCodeUrl,
+        adminProfilePic: next.adminProfilePic // อัปเดตรูปโปรไฟล์ลงฐานข้อมูล
       }).eq('id', 1).then();
       return next;
     });
